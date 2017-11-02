@@ -141,11 +141,12 @@ def perform_experiment(num_bins, filename):
 def handle_arguments():
     parser = argparse.ArgumentParser()
     parser.add_argument("filename", help="CSV filename to run")
+    parser.add_argument("num_thingies", type=int, help="I'm not sure what to call this but its how many ticks on the x axis in the graffff")
     return parser.parse_args()
 
 def main():
     args = handle_arguments()
-    search_space = np.arange(1, 40, dtype=int)
+    search_space = np.arange(1, args.num_thingies, dtype=int)
     success_rates = np.zeros_like(search_space, dtype=float)
     avg_service_times = np.zeros_like(search_space, dtype=float)
     for index in range(len(search_space)):
