@@ -11,7 +11,7 @@ RANDOM_SEED = 1
 NUM_RECORDS = 10000
 
 # avg inter-arrival time between requests, seconds
-REQUEST_ARRIVAL_RATE = 0.1
+REQUEST_ARRIVAL_RATE = 0.3
 
 # uniform-distribution range for request quantities (upper bound exclusive)
 REQUEST_RANGE = (1, 10)

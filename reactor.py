@@ -41,6 +41,13 @@ class Reactor:
                     self.rand.randint(0, 10000)
                 )
             )
+        self._last_time_used = created_at
+
+    def num_bins(self):
+        """
+        returns the number of bins this reactor has
+        """
+        return len(self.bins)
 
     def reserve_stock(self, quantity, timestamp, service_bin_id=None):
         """
@@ -52,6 +59,9 @@ class Reactor:
         returns:
             (completed_time, service_bin_id, quantity_reserved)
         """
+        assert timestamp >= self._last_time_used
+        self._last_time_used = timestamp
+
         # pick a random bin
         if service_bin_id is None:
             service_bin_id = self.rand.randrange(0, len(self.bins))
@@ -72,6 +82,9 @@ class Reactor:
         returns:
             [service_bin_id] - the bins which were modified
         """
+        assert timestamp >= self._last_time_used
+        self._last_time_used = timestamp
+        
         # strategy: immediately gets in line for all identified bins
         # and evenly distributes all inventory between them
         if service_bin_ids is None:
