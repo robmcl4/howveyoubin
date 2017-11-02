@@ -7,17 +7,27 @@ import argparse
 import csv
 import random
 
+def tuple_of_two(t):
+    try:
+        x = int(t.split(',')[0])
+        y = int(t.split(',')[1])
+        tup = (x, y)
+
+        return tup
+    except:
+        raise argparse.ArgumentTypeError("Not a tuple of two ints, try again i guess...")
+
 def handle_arguments():
     parser = argparse.ArgumentParser()
     parser.add_argument("-n", "--num_records", type=int, default=10000,
             help="The number of records to generate")
     parser.add_argument("-r", "--request_arrival_rate", type=float, default=0.3,
             help="Average inter arrival time between requests, in seconds")
-    parser.add_argument("-a", "--request_range", type=tuple, default=(1,10),
+    parser.add_argument("-a", "--request_range", type=tuple_of_two, default=(1,10),
             help="Uniform distribution range for request quantities")
     parser.add_argument("-s", "--restock_arrival_rate", type=float, default=100,
             help="Average inter arrival time between restocks, in seconds")
-    parser.add_argument("-b", "--restock_range", type=tuple, default=(2000, 2100),
+    parser.add_argument("-b", "--restock_range", type=tuple_of_two, default=(2000, 2100),
             help="Uniform distribution range for request restocks")
     parser.add_argument("-f","--filename", type=str, default='test_script.csv',
             help="Name for output csv file")

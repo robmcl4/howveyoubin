@@ -5,7 +5,7 @@ howveyoubin.py
 simulates the lettuce inventory-management system
 """
 
-import sys
+import argparse
 import numpy as np
 import matplotlib.pyplot as plt
 
@@ -23,12 +23,12 @@ RAND_SEED = 1
 SERVICE_TIME = 0.05
 
 
-def perform_experiment(num_bins):
+def perform_experiment(num_bins, filename):
     """
     Performs the experiment given the supplied number of bins.
     Returns (avg service time, success rate) as floats from 0 to 1
     """
-    script_name = sys.argv[1]
+    script_name = filename
     script = script_parser.parse_script(script_name)
     rctr = reactor.Reactor(0, num_bins, 0, SERVICE_TIME, RAND_SEED)
     requests_serviced = 0
@@ -138,12 +138,18 @@ def perform_experiment(num_bins):
                     requests_serviced += 1
     return time_spent_serving / requests_serviced, (requests_serviced) / (requests_serviced + failed_requests)
 
+def handle_arguments():
+    parser = argparse.ArgumentParser()
+    parser.add_argument("filename", help="CSV filename to run")
+    return parser.parse_args()
+
 def main():
+    args = handle_arguments()
     search_space = np.arange(1, 40, dtype=int)
     success_rates = np.zeros_like(search_space, dtype=float)
     avg_service_times = np.zeros_like(search_space, dtype=float)
     for index in range(len(search_space)):
-        avg_service_time, success_rate = perform_experiment(int(search_space[index]))
+        avg_service_time, success_rate = perform_experiment(int(search_space[index]), args.filename)
         success_rates[index] = success_rate
         avg_service_times[index] = avg_service_time
         print(index)
