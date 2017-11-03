@@ -20,7 +20,7 @@ INITIAL_BINS = 400
 RAND_SEED = 1
 
 # average service time, seconds
-SERVICE_TIME = 0.05
+SERVICE_TIME = 0.15
 
 
 def perform_experiment(num_bins, filename):
@@ -146,7 +146,7 @@ def handle_arguments():
 
 def main():
     args = handle_arguments()
-    search_space = np.arange(1, args.num_thingies, dtype=int)
+    search_space = np.arange(1, args.num_thingies, 10, dtype=int)
     success_rates = np.zeros_like(search_space, dtype=float)
     avg_service_times = np.zeros_like(search_space, dtype=float)
     for index in range(len(search_space)):
