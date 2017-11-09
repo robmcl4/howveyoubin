@@ -7,11 +7,13 @@ a transactional record
 
 import random
 import math
+from typing import List
+from typing import Tuple
 
 
 class Reactor:
 
-    def __init__(self, stock, bins, created_at, service_time, seed):
+    def __init__(self, stock: int, bins: int, created_at: float, service_time: float, seed: int):
         """
         Intitializes this inventory-processor
         params:
@@ -25,6 +27,7 @@ class Reactor:
         self.rand = random.Random()
         self.rand.seed(seed)
         self.bins = []
+        self.service_time = service_time
 
         # assign stock to bins as uniformly as possible (the last bin may
         # have a few less than the others)
@@ -43,13 +46,13 @@ class Reactor:
             )
         self._last_time_used = created_at
 
-    def num_bins(self):
+    def num_bins(self) -> int:
         """
         returns the number of bins this reactor has
         """
         return len(self.bins)
 
-    def reserve_stock(self, quantity, timestamp, service_bin_id=None):
+    def reserve_stock(self, quantity: int, timestamp: float, service_bin_id: int=None) -> Tuple[float, int, int]:
         """
         Uses the pool of bins to reserve inventory stock
         params:
@@ -72,7 +75,7 @@ class Reactor:
         )
         return completed_time, service_bin_id, quantity_reserved
 
-    def add_stock(self, quantity, timestamp, service_bin_ids=None):
+    def add_stock(self, quantity: int, timestamp: float, service_bin_ids:List[int] = None) -> List[int]:
         """
         Adds more inventory stock to the pool of bins
         params:
@@ -100,10 +103,68 @@ class Reactor:
             self.bins[bin_id].add_stock(stock_to_assign, timestamp)
         return sorted(service_bin_ids)
 
+    def reshape_num_bins(self, num_bins: int, timestamp: float) -> float:
+        """
+        Adjusts the number of bins up or down at the given timestamp
+        Args:
+            num_bins - int, the new number of bins to use
+            timestamp - float, at what timestamp this adjustment begins
+        Returns:
+            time_completed
+        """
+        assert timestamp >= self._last_time_used
+        self._last_time_used = timestamp
+
+        if len(self.bins) == num_bins:
+            # no work to do
+            return timestamp
+        
+        # find out what the soonest time is that we can destroy the existing bins
+        soonest_time = timestamp
+        for bin_ in self.bins:
+            available_after = bin_.next_unlocked(timestamp)
+            if available_after > soonest_time:
+                soonest_time = available_after
+        
+        stock = self.stock_available()
+        
+        # create new bins
+        stock_per_bin = math.ceil(stock / num_bins)
+        stock_assigned = 0
+        for _ in range(num_bins):
+            stock_to_assign = min(stock_per_bin, stock - stock_assigned)
+            stock_assigned += stock_to_assign
+            self.bins.append(
+                Bin(
+                    stock_to_assign,
+                    soonest_time,
+                    self.service_time,
+                    self.rand.randint(0, 10000)
+                )
+            )
+        
+        # estimate how long it took us to make these new bins, and reserve them
+        # all for that time
+        service_time = self.rand.expovariate(1 / float(self.service_time))
+        for bin_ in self.bins:
+            bin_.locked_times.append(soonest_time, soonest_time + service_time)        
+        return soonest_time + service_time
+
+
+    def stock_available(self) -> int:
+        """
+        Finds the quantity of items available
+        Returns:
+            int, the quantity of items available
+        """
+        ret = 0
+        for bin_ in self.bins:
+            ret += bin_.remaining_stock()
+        return ret
+
 
 class Bin:
-
-    def __init__(self, stock, created_at, service_time, seed):
+    def __init__(self, stock: int, created_at: float, service_time: float, seed: int):
         """
         Initialize this bin
         params:
@@ -126,8 +187,7 @@ class Bin:
         self.rand = random.Random()
         self.rand.seed(seed)
 
-
-    def reserve_stock(self, quantity, timestamp):
+    def reserve_stock(self, quantity: int, timestamp: float) -> Tuple[float, int]:
         """
         Attempts to reserve stock from this bin.
         params:
@@ -138,7 +198,7 @@ class Bin:
             and how much was reserved
         """
         # wait for the lock to be released
-        end_of_queue_time = self._wait_in_queue(timestamp)
+        end_of_queue_time = self.next_unlocked(timestamp)
         # find out how long we're randomly spending in processing
         service_time = self.rand.expovariate(1 / float(self.service_time))
         # record how long we've now locked the bin
@@ -146,9 +206,7 @@ class Bin:
             (end_of_queue_time, end_of_queue_time + service_time)
         )
         # take as much supply as we can
-        true_remaining_stock_at_service = self._remaining_stock_at_time(
-            end_of_queue_time
-        )
+        true_remaining_stock_at_service = self.remaining_stock()
         stock_left = max(0, true_remaining_stock_at_service - quantity)
         self.stock.append(
             (end_of_queue_time + service_time, stock_left)
@@ -158,7 +216,7 @@ class Bin:
             true_remaining_stock_at_service - stock_left
         )
 
-    def add_stock(self, quantity, timestamp):
+    def add_stock(self, quantity: int, timestamp: float):
         """
         Adds more inventory stock to the pool of bins
         params:
@@ -166,29 +224,31 @@ class Bin:
             timestamp - when this request executes
         """
         # wait for the lock to be released
-        end_of_queue_time = self._wait_in_queue(timestamp)
+        end_of_queue_time = self.next_unlocked(timestamp)
         # find out how long we're randomly spending in processing
         service_time = self.rand.expovariate(1 / float(self.service_time))
         # record how long we've now locked the bin
         self.locked_times.append(
             (end_of_queue_time, end_of_queue_time + service_time)
         )
-        remaining_stock = self._remaining_stock_at_time(end_of_queue_time)
+        remaining_stock = self.remaining_stock()
         self.stock.append(
             (end_of_queue_time + service_time, remaining_stock + quantity)
         )
 
-    def _wait_in_queue(self, timestamp):
+    def next_unlocked(self, timestamp: float) -> float:
         """
         Gets the next available timestamp for when the bin is unlocked
+        Args:
+            timestamp: float, the timestamp to begin searching
         Returns:
             float, the timestamp for when next unlocked
         """
         return max(self.locked_times[-1][1], timestamp)
     
-    def _remaining_stock_at_time(self, timestamp):
+    def remaining_stock(self) -> int:
         """
-        Gets the quantity of stock remaining at the given timestamp
+        Gets the most recent quantity of stock remaining
         Returns:
             int, the stock remaining
         """
