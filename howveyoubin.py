@@ -17,15 +17,19 @@ import history_recorder
 # initial number of bins
 INITIAL_BINS = 400
 
+
 # seed
 RAND_SEED = 1
+
 
 # average service time, seconds
 SERVICE_TIME = 0.15
 
+
 # the number of bins to use for sampling performance metrics over the course
 # of evaluating an entire script
 NUM_METRIC_BINS = 50
+
 
 class ReturnInventoryRequest:
     """
@@ -224,23 +228,36 @@ def plot_timeplot(num_bins, fname):
     x_axis_values = np.zeros_like(queue_times_avgs, dtype=float)
     for i in range(len(x_axis_values)):
         x_axis_values[i] = result.sample_rate * i
-    plt.plot(
+    fig, ax1 = plt.subplots()
+    plt.title('Avg. Response Time over Time')
+    ax1.set_xlabel('Elapsed Time')
+    ax1.set_ylabel('Avg. Response Time (by component)')
+    ax1.plot(
         x_axis_values,
         queue_times_avgs,
         label='queue time'
     )
-    plt.plot(
+    ax1.plot(
         x_axis_values,
         service_times_avgs,
         label='service time'
     )
     for restock in result.get_restocks():
-        plt.axvline(x=restock)
-    plt.title('Avg. Response Time over Time')
-    plt.xlabel('Elapsed Time')
-    plt.ylabel('Avg. Response Time (by component)')
-    plt.legend()
+        ax1.axvline(x=restock, linestyle='-.', color='c')
+    ax1.legend(loc=0)
+
+    ax2 = ax1.twinx()
+    ax2.plot(
+        x_axis_values,
+        np.resize(result.num_records, len(x_axis_values)) / result.sample_rate,
+        'g:',
+        label='requests / time unit'
+    )
+    ax2.set_ylabel('requests/s')
+    ax2.legend(loc=0)
+    fig.tight_layout()
     plt.show()
+
 
 def main():
     args = handle_arguments()
@@ -248,5 +265,6 @@ def main():
         plot_timeplot(args.max_bins, args.filename)
     else:
         plot_range_of_bins(args.max_bins, args.filename)
+
 
 main()
