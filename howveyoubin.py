@@ -11,6 +11,7 @@ import matplotlib.pyplot as plt
 
 import script_parser
 import reactor
+import history_recorder
 
 
 # initial number of bins
@@ -22,6 +23,9 @@ RAND_SEED = 1
 # average service time, seconds
 SERVICE_TIME = 0.15
 
+# the number of bins to use for sampling performance metrics over the course
+# of evaluating an entire script
+NUM_METRIC_BINS = 30
 
 class ReturnInventoryRequest:
     """
@@ -54,6 +58,8 @@ class RetryInventoryRequest:
                  original_request: script_parser.InventoryRequest,
                  reserved_so_far: int,
                  first_bin_checked: int,
+                 queue_time_so_far: float,
+                 service_time_so_far: float,
                  timestamp: float):
         """
         Creates this RetryInvenvoryRequest
@@ -61,6 +67,8 @@ class RetryInventoryRequest:
             original_request: the originating request
             reserved_so_far: the quantity of item which we've managed to reserve
             first_bin_checked: the first bin we checked
+            queue_time_so_far: the amount of time spent in the queue
+            service_time_so_far: the amount of time spent in service
             timestamp: float, when to execute this request
         """
         assert isinstance(original_request, script_parser.InventoryRequest)
@@ -71,6 +79,8 @@ class RetryInventoryRequest:
         self.original_request = original_request
         self.reserved_so_far = reserved_so_far
         self.first_bin_checked = first_bin_checked
+        self.queue_time_so_far = queue_time_so_far
+        self.service_time_so_far = service_time_so_far
         self.timestamp = timestamp
         self.bins_checked = 1
 
@@ -91,24 +101,26 @@ def insert_action_sorted(lst, action):
 def perform_experiment(num_bins, filename):
     """
     Performs the experiment given the supplied number of bins.
-    Returns (avg service time, success rate) as floats from 0 to 1
+    Returns a Recorder object
     """
     script_name = filename
     script = script_parser.parse_script(script_name)
     rctr = reactor.Reactor(0, num_bins, 0, SERVICE_TIME, RAND_SEED)
-    requests_serviced = 0
-    failed_requests = 0
-    time_spent_serving = 0
+    script_timespan = script[-1].timestamp - script[0].timestamp
+    recorder = history_recorder.Recorder(script_timespan / NUM_METRIC_BINS)
 
     # iterate while there's still work to do
     while len(script) > 0:
         curr_item = script[0]
         del script[0]
 
-        if (isinstance(curr_item, ReturnInventoryRequest) or
-            isinstance(curr_item, script_parser.InventoryRestock)):
+        if isinstance(curr_item, ReturnInventoryRequest):
             # we need to reshelve some inventory
             rctr.add_stock(curr_item.quantity, curr_item.timestamp)
+        if isinstance(curr_item, script_parser.InventoryRestock):
+            # natural restock
+            rctr.add_stock(curr_item.quantity, curr_item.timestamp)
+            recorder.record_restock(curr_item.timestamp)
         if isinstance(curr_item, RetryInventoryRequest):
             assert curr_item.original_request.quantity > curr_item.reserved_so_far
             # we should continue a request
@@ -127,24 +139,30 @@ def perform_experiment(num_bins, filename):
             else:
                 next_bin = (curr_item.first_bin_checked +
                             curr_item.bins_checked) % rctr.num_bins()
-                completed_time, service_bin, qty_reserved = rctr.reserve_stock(
+                queue_time, service_time, _, qty_reserved = rctr.reserve_stock(
                     curr_item.original_request.quantity - curr_item.reserved_so_far,
                     curr_item.timestamp,
                     service_bin_id=next_bin
                 )
+                curr_item.queue_time_so_far += queue_time
+                curr_item.service_time_so_far += service_time
+                completed_time = (curr_item.original_request.timestamp +
+                                  curr_item.queue_time_so_far +
+                                  curr_item.service_time_so_far)
                 # if we've now got everything, record successful run
                 if qty_reserved + curr_item.reserved_so_far == curr_item.original_request.quantity:
-                    elapsed = completed_time - curr_item.original_request.timestamp
-                    assert elapsed > 0
-                    time_spent_serving += elapsed
-                    requests_serviced += 1
+                    recorder.record_event(
+                        curr_item.queue_time_so_far + queue_time,
+                        curr_item.service_time_so_far + service_time,
+                        completed_time
+                    )
                 # otherwise we need to check another bin
                 else:
                     curr_item.bins_checked += 1
                     curr_item.timestamp = completed_time
                     insert_action_sorted(script, curr_item)
         elif isinstance(curr_item, script_parser.InventoryRequest):
-            completed_time, bin_id, qty = rctr.reserve_stock(
+            queue_time, service_time, bin_id, qty = rctr.reserve_stock(
                 curr_item.quantity,
                 curr_item.timestamp
             )
@@ -156,35 +174,75 @@ def perform_experiment(num_bins, filename):
                         curr_item,
                         qty,
                         bin_id,
-                        completed_time
+                        queue_time,
+                        service_time,
+                        curr_item.timestamp + queue_time + service_time
                     )
                 )
             else:
-                elapsed = completed_time - curr_item.timestamp
-                assert elapsed > 0
-                time_spent_serving += elapsed
-                requests_serviced += 1
-    return time_spent_serving / requests_serviced, (requests_serviced) / (requests_serviced + failed_requests)
+                recorder.record_event(
+                    queue_time,
+                    service_time,
+                    curr_item.timestamp + queue_time + service_time
+                )
+    return recorder
 
 
 def handle_arguments():
     parser = argparse.ArgumentParser()
     parser.add_argument("filename", help="CSV filename to run")
     parser.add_argument("max_bins", type=int, help="max number of bins to search")
+    parser.add_argument("-t",
+        "--time-plot", 
+        help="plot a time-plot of performance with the given number of bins",
+        action='store_true')
     return parser.parse_args()
 
 
-def main():
-    args = handle_arguments()
-    search_space = np.arange(1, args.max_bins, max(1, args.max_bins / 50), dtype=int)
-    success_rates = np.zeros_like(search_space, dtype=float)
+def plot_range_of_bins(max_bins, fname):
+    search_space = np.arange(1, max_bins, max(1, max_bins / 50), dtype=int)
+    avg_queue_times = np.zeros_like(search_space, dtype=float)
     avg_service_times = np.zeros_like(search_space, dtype=float)
     for index in range(len(search_space)):
-        avg_service_time, success_rate = perform_experiment(int(search_space[index]), args.filename)
-        success_rates[index] = success_rate
-        avg_service_times[index] = avg_service_time
-        print(index)
-    plt.scatter(search_space, avg_service_times)
+        recorder = perform_experiment(int(search_space[index]), fname)
+        queue_times_avgs, service_times_avgs = recorder.get_timelog()
+        avg_queue_times[index] = np.average(queue_times_avgs)
+        avg_service_times[index] = np.average(service_times_avgs)
+        print(search_space[index])
+    plt.bar(search_space, avg_queue_times, 1)
+    plt.bar(search_space, avg_service_times, 1, bottom=avg_queue_times, color='red')
     plt.show()
+
+def plot_timeplot(num_bins, fname):
+    assert num_bins > 0
+    result = perform_experiment(num_bins, fname)
+    queue_times_avgs, service_times_avgs = result.get_timelog()
+    x_axis_values = np.zeros_like(queue_times_avgs, dtype=float)
+    for i in range(len(x_axis_values)):
+        x_axis_values[i] = result.sample_rate * i
+    plt.plot(
+        x_axis_values,
+        queue_times_avgs,
+        label='queue time'
+    )
+    plt.plot(
+        x_axis_values,
+        service_times_avgs,
+        label='service time'
+    )
+    for restock in result.restocks:
+        plt.axvline(x=restock)
+    plt.title('Avg. Response Time over Time')
+    plt.xlabel('Elapsed Time')
+    plt.ylabel('Avg. Response Time (by component)')
+    plt.legend()
+    plt.show()
+
+def main():
+    args = handle_arguments()
+    if args.time_plot is None:
+        plot_range_of_bins(args.max_bins, args.filename)
+    else:
+        plot_timeplot(args.max_bins, args.filename)
 
 main()

@@ -59,7 +59,7 @@ class Reactor:
             timestamp - when this request executes
             service_bin_id - optional, int, ID of the bin to request from
         returns:
-            (completed_time, service_bin_id, quantity_reserved)
+            (queue_time, service_time, service_bin_id, quantity_reserved)
         """
         assert timestamp >= self._last_time_used
         self._last_time_used = timestamp
@@ -68,11 +68,11 @@ class Reactor:
         if service_bin_id is None:
             service_bin_id = self.rand.randrange(0, len(self.bins))
         bin_ = self.bins[service_bin_id]
-        completed_time, quantity_reserved = bin_.reserve_stock(
+        queue_time, service_time, quantity_reserved = bin_.reserve_stock(
             quantity,
             timestamp
         )
-        return completed_time, service_bin_id, quantity_reserved
+        return queue_time, service_time, service_bin_id, quantity_reserved
 
     def add_stock(self, quantity: int, timestamp: float, service_bin_ids:List[int] = None) -> List[int]:
         """
@@ -193,8 +193,9 @@ class Bin:
             quantity - the amount of stock needed
             timestamp - the current timestamp at the start of request
         returns:
-            (end_timestamp, quantity) indicating when the request completed
-            and how much was reserved
+            (queue_time, service_time, quantity)
+                indicating how much time was spent in the queue, how much
+                was spent in service, and the quantity reserved
         """
         # wait for the lock to be released
         end_of_queue_time = self.next_unlocked(timestamp)
@@ -211,7 +212,8 @@ class Bin:
             (end_of_queue_time + service_time, stock_left)
         )
         return (
-            end_of_queue_time + service_time,
+            end_of_queue_time - timestamp,
+            service_time,
             true_remaining_stock_at_service - stock_left
         )
 
