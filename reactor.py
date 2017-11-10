@@ -12,7 +12,6 @@ from typing import Tuple
 
 
 class Reactor:
-
     def __init__(self, stock: int, bins: int, created_at: float, service_time: float, seed: int):
         """
         Intitializes this inventory-processor
@@ -245,7 +244,7 @@ class Bin:
             float, the timestamp for when next unlocked
         """
         return max(self.locked_times[-1][1], timestamp)
-    
+
     def remaining_stock(self) -> int:
         """
         Gets the most recent quantity of stock remaining

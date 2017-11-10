@@ -23,6 +23,71 @@ RAND_SEED = 1
 SERVICE_TIME = 0.15
 
 
+class ReturnInventoryRequest:
+    """
+    We've failed to get everything we need, just put everything back on the
+    shelves. Represents the data needed to do that.
+    """
+
+    def __init__(self,
+                 original_request: script_parser.InventoryRequest,
+                 quantity: int,
+                 timestamp: float):
+        """
+        Creates this ReturnInventoryRequest
+        Args:
+            original_request: the original InventoryRequest that's now failed
+            quantity: the number of items to give back
+            timestamp: when to put them back
+        """
+        self.original_request = original_request
+        self.quantity = quantity
+        self.timestamp = timestamp
+
+
+class RetryInventoryRequest:
+    """
+    Represents the intermediate state in attempting to reserve inventory.
+    """
+
+    def __init__(self,
+                 original_request: script_parser.InventoryRequest,
+                 reserved_so_far: int,
+                 first_bin_checked: int,
+                 timestamp: float):
+        """
+        Creates this RetryInvenvoryRequest
+        Args:
+            original_request: the originating request
+            reserved_so_far: the quantity of item which we've managed to reserve
+            first_bin_checked: the first bin we checked
+            timestamp: float, when to execute this request
+        """
+        assert isinstance(original_request, script_parser.InventoryRequest)
+        assert reserved_so_far >= 0
+        assert reserved_so_far < original_request.quantity
+        assert first_bin_checked >= 0
+        assert timestamp >= 0
+        self.original_request = original_request
+        self.reserved_so_far = reserved_so_far
+        self.first_bin_checked = first_bin_checked
+        self.timestamp = timestamp
+        self.bins_checked = 1
+
+
+def insert_action_sorted(lst, action):
+    """
+    Inserts the given action in-place into the given list
+    """
+    insert_index = 0
+    while (insert_index < len(lst) and
+           action.timestamp > lst[insert_index].timestamp):
+        insert_index += 1
+    lst.insert(insert_index, action)
+    assert insert_index == 0 or lst[insert_index-1].timestamp <= lst[insert_index].timestamp
+    assert insert_index == len(lst)-1 or lst[insert_index].timestamp <= lst[insert_index+1].timestamp
+
+
 def perform_experiment(num_bins, filename):
     """
     Performs the experiment given the supplied number of bins.
@@ -35,118 +100,83 @@ def perform_experiment(num_bins, filename):
     failed_requests = 0
     time_spent_serving = 0
 
-    #
-    # The record of currently-in-progress requests. Requests are put here
-    # when they need to look into another bin (or restock),
-    # but potentially need to yield to another thread in the meantime.
-    # This should be kept sorted by next action
-    # timestamp.
-    # [(InventoryRequest, quantity_reserved_so_far, next_bin_to_check,
-    #   first_bin_checked, time_to_execute)
-    #   OR
-    #  (None, quantity_to_return, None, None, time_to_execute)]
-    requests_in_progress = []
-
     # iterate while there's still work to do
-    while len(requests_in_progress) > 0 or len(script) > 0:
-        # find out whether we should continue executing an inventory request
-        # or execute a new item
-        if len(requests_in_progress) > 0 and (
-                len(script) == 0 or
-                requests_in_progress[0][4] <= script[0].timestamp ):
-            # we should continue a request (or do a restock)
-            inv_req, reserved_so_far, next_bin_to_check, \
-                first_bin_checked, time_to_execute = requests_in_progress[0]
-            del requests_in_progress[0]
-            # if restock:
-            if inv_req == None:
-                rctr.add_stock(reserved_so_far, time_to_execute)
-            # if request:
+    while len(script) > 0:
+        curr_item = script[0]
+        del script[0]
+
+        if (isinstance(curr_item, ReturnInventoryRequest) or
+            isinstance(curr_item, script_parser.InventoryRestock)):
+            # we need to reshelve some inventory
+            rctr.add_stock(curr_item.quantity, curr_item.timestamp)
+        if isinstance(curr_item, RetryInventoryRequest):
+            assert curr_item.original_request.quantity > curr_item.reserved_so_far
+            # we should continue a request
+            # ... but if we've tried all the bins, give up
+            if curr_item.bins_checked >= rctr.num_bins():
+                insert_action_sorted(
+                    script,
+                    ReturnInventoryRequest(
+                        curr_item.original_request,
+                        curr_item.reserved_so_far,
+                        curr_item.timestamp
+                    )
+                )
+            # we haven't tried all bins, so we should totally try to get more
+            # inventory
             else:
-                completed_time, bin_id, qty = rctr.reserve_stock(
-                    inv_req.quantity - reserved_so_far,
-                    time_to_execute
+                next_bin = (curr_item.first_bin_checked +
+                            curr_item.bins_checked) % rctr.num_bins()
+                completed_time, service_bin, qty_reserved = rctr.reserve_stock(
+                    curr_item.original_request.quantity - curr_item.reserved_so_far,
+                    curr_item.timestamp,
+                    service_bin_id=next_bin
                 )
-                assert inv_req.quantity >= qty + reserved_so_far
                 # if we've now got everything, record successful run
-                if qty + reserved_so_far == inv_req.quantity:
-                    elapsed = completed_time - inv_req.timestamp
+                if qty_reserved + curr_item.reserved_so_far == curr_item.original_request.quantity:
+                    elapsed = completed_time - curr_item.original_request.timestamp
+                    assert elapsed > 0
                     time_spent_serving += elapsed
                     requests_serviced += 1
-                # otherwise we need to consider checking another bin
+                # otherwise we need to check another bin
                 else:
-                    new_next_bin_to_check = (next_bin_to_check + 1) % rctr.num_bins()
-                    # if we've checked every bin, give up
-                    if new_next_bin_to_check == first_bin_checked:
-                        # put everything back
-                        requests_in_progress.append((
-                            None,
-                            reserved_so_far + qty,
-                            None,
-                            None,
-                            completed_time
-                        ))
-                        requests_in_progress.sort(key=lambda x: x[4])
-                        failed_requests += 1
-                    else:
-                        # we need to try another bin
-                        requests_in_progress.append((
-                            inv_req,
-                            reserved_so_far + qty,
-                            new_next_bin_to_check,
-                            first_bin_checked,
-                            completed_time
-                        ))
-                        requests_in_progress.sort(key=lambda x: x[4])
-        # we should process the next item in the script
-        else:
-            item = script[0]
-            del script[0]
-            if isinstance(item, script_parser.InventoryRestock):
-                rctr.add_stock(item.quantity, item.timestamp)
-            elif isinstance(item, script_parser.InventoryRequest):
-                completed_time, bin_id, qty = rctr.reserve_stock(
-                    item.quantity,
-                    item.timestamp
+                    curr_item.bins_checked += 1
+                    curr_item.timestamp = completed_time
+                    insert_action_sorted(script, curr_item)
+        elif isinstance(curr_item, script_parser.InventoryRequest):
+            completed_time, bin_id, qty = rctr.reserve_stock(
+                curr_item.quantity,
+                curr_item.timestamp
+            )
+            assert qty <= curr_item.quantity
+            if qty != curr_item.quantity:
+                insert_action_sorted(
+                    script,
+                    RetryInventoryRequest(
+                        curr_item,
+                        qty,
+                        bin_id,
+                        completed_time
+                    )
                 )
-                assert qty <= item.quantity
-                if qty != item.quantity:
-                    if rctr.num_bins() == 1:
-                        # we're just out of inventory :(
-                        requests_in_progress.append((
-                            None,
-                            qty,
-                            None,
-                            None,
-                            completed_time
-                        ))
-                        requests_in_progress.sort(key=lambda x: x[4])
-                        failed_requests += 1
-                    else:
-                        # need to enqueue trying another bin
-                        requests_in_progress.append((
-                            item,
-                            qty,
-                            (bin_id + 1) % rctr.num_bins(),
-                            bin_id,
-                            completed_time
-                        ))
-                        requests_in_progress.sort(key=lambda x: x[4])
-                else:
-                    elapsed = completed_time - item.timestamp
-                    time_spent_serving += elapsed
-                    requests_serviced += 1
+            else:
+                elapsed = completed_time - curr_item.timestamp
+                assert elapsed > 0
+                time_spent_serving += elapsed
+                requests_serviced += 1
     return time_spent_serving / requests_serviced, (requests_serviced) / (requests_serviced + failed_requests)
+
 
 def handle_arguments():
     parser = argparse.ArgumentParser()
     parser.add_argument("filename", help="CSV filename to run")
-    parser.add_argument("num_thingies", type=int, help="I'm not sure what to call this but its how many ticks on the x axis in the graffff")
+    parser.add_argument("max_bins", type=int, help="max number of bins to search")
     return parser.parse_args()
+
 
 def main():
     args = handle_arguments()
-    search_space = np.arange(1, args.num_thingies, 10, dtype=int)
+    search_space = np.arange(1, args.max_bins, max(1, args.max_bins / 50), dtype=int)
     success_rates = np.zeros_like(search_space, dtype=float)
     avg_service_times = np.zeros_like(search_space, dtype=float)
     for index in range(len(search_space)):
