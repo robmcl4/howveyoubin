@@ -25,7 +25,8 @@ class Recorder:
         self.service_time_numerator = np.zeros(1024, dtype=float)
         # the number of records seen in each sample bin
         self.num_records = np.zeros(1024, dtype=int)
-        self.restocks = []
+        self.restocks = np.zeros(1024, dtype=float)
+        self.num_restocks = 0
     
     def record_event(self, queue_time: float, service_time: float, timestamp: float):
         """
@@ -55,7 +56,20 @@ class Recorder:
             timestamp: when the restock occurred
         """
         assert timestamp >= 0
-        self.restocks.append(timestamp)
+        self.num_restocks += 1
+        if self.num_restocks >= len(self.restocks):
+            new_size = len(self.restocks) * 2
+            assert new_size <= 32768
+            self.restocks.resize(new_size)
+        self.restocks[self.num_restocks-1] = timestamp
+
+    def get_restocks(self):
+        """
+        Gets a numpy-array of floats indicating timestamps of restocks
+        Returns:
+            nx1 array of floats
+        """
+        return np.resize(self.restocks, self.num_restocks)
 
     def get_timelog(self):
         """

@@ -25,7 +25,7 @@ SERVICE_TIME = 0.15
 
 # the number of bins to use for sampling performance metrics over the course
 # of evaluating an entire script
-NUM_METRIC_BINS = 30
+NUM_METRIC_BINS = 50
 
 class ReturnInventoryRequest:
     """
@@ -209,9 +209,13 @@ def plot_range_of_bins(max_bins, fname):
         avg_queue_times[index] = np.average(queue_times_avgs)
         avg_service_times[index] = np.average(service_times_avgs)
         print(search_space[index])
-    plt.bar(search_space, avg_queue_times, 1)
-    plt.bar(search_space, avg_service_times, 1, bottom=avg_queue_times, color='red')
+    plt.title('Avg. Response Time vs Number of Bins')
+    plt.xlabel('Number of Bins')
+    plt.ylabel('Avg. Response Time')
+    plt.bar(search_space, avg_queue_times, 1, label='avg. queue time')
+    plt.bar(search_space, avg_service_times, 1, bottom=avg_queue_times, label='avg. service time')
     plt.show()
+
 
 def plot_timeplot(num_bins, fname):
     assert num_bins > 0
@@ -230,7 +234,7 @@ def plot_timeplot(num_bins, fname):
         service_times_avgs,
         label='service time'
     )
-    for restock in result.restocks:
+    for restock in result.get_restocks():
         plt.axvline(x=restock)
     plt.title('Avg. Response Time over Time')
     plt.xlabel('Elapsed Time')
@@ -240,9 +244,9 @@ def plot_timeplot(num_bins, fname):
 
 def main():
     args = handle_arguments()
-    if args.time_plot is None:
-        plot_range_of_bins(args.max_bins, args.filename)
-    else:
+    if args.time_plot:
         plot_timeplot(args.max_bins, args.filename)
+    else:
+        plot_range_of_bins(args.max_bins, args.filename)
 
 main()
