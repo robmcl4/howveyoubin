@@ -197,7 +197,7 @@ def handle_arguments():
     parser.add_argument("filename", help="CSV filename to run")
     parser.add_argument("max_bins", type=int, help="max number of bins to search")
     parser.add_argument("-t",
-        "--time-plot", 
+        "--time-plot",
         help="plot a time-plot of performance with the given number of bins",
         action='store_true')
     return parser.parse_args()
@@ -218,6 +218,7 @@ def plot_range_of_bins(max_bins, fname):
     plt.ylabel('Avg. Response Time')
     plt.bar(search_space, avg_queue_times, 1, label='avg. queue time')
     plt.bar(search_space, avg_service_times, 1, bottom=avg_queue_times, label='avg. service time')
+    plt.legend()
     plt.show()
 
 
