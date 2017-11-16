@@ -9,11 +9,12 @@ import numpy as np
 
 
 class Recorder:    
-    def __init__(self, sample_rate: float):
+    def __init__(self, sample_rate: float, script_end: float):
         """
         Creates a recorder
         Args:
             sample_rate - float, the width of a sampling bin in terms of timestamps
+            script_end - float, when the experiment ends (when to stop recording events)
         """
         assert sample_rate > 0
         self.sample_rate = sample_rate
@@ -21,21 +22,28 @@ class Recorder:
         # when calculating the average, this is the numerator of time spent
         # waiting in a queue
         self.queue_waiting_numerator = np.zeros(1024, dtype=float)
-        # same as aboce, except for time spent servicing (in-bin)
+        # same as above, except for time spent servicing (in-bin)
         self.service_time_numerator = np.zeros(1024, dtype=float)
+        # same as above, except for current inventory stock
+        self.stock_numerator = np.zeros(1024, dtype=np.uint64)
         # the number of records seen in each sample bin
-        self.num_records = np.zeros(1024, dtype=int)
+        self.num_records = np.zeros(1024, dtype=np.uint64)
         self.restocks = np.zeros(1024, dtype=float)
         self.num_restocks = 0
-    
-    def record_event(self, queue_time: float, service_time: float, timestamp: float):
+        self.script_end = script_end
+
+    def record_event(self, queue_time: float, service_time: float, stock_left: int, timestamp: float):
         """
         Record that an event happened with the given queue and service time
         Args:
             queue_time - float, time spent queueing
             service_time - float, time spent in the service worker (bin)
+            stock_left - int, the number of items left in stock after this request
             timestamp - float, the timestamp when this succeeded
         """
+        if timestamp > self.script_end:
+            return
+        assert timestamp >= 0
         self.oldest_timestamp = max(self.oldest_timestamp, timestamp)
         bin_index = math.floor(timestamp / self.sample_rate)
         # if we need to grow, do that
@@ -44,9 +52,11 @@ class Recorder:
             assert new_size <= 32768
             self.queue_waiting_numerator.resize(new_size)
             self.service_time_numerator.resize(new_size)
+            self.stock_numerator.resize(new_size)
             self.num_records.resize(new_size)
         self.queue_waiting_numerator[bin_index] += queue_time
         self.service_time_numerator[bin_index] += service_time
+        self.stock_numerator[bin_index] += stock_left
         self.num_records[bin_index] += 1
 
     def record_restock(self, timestamp: float):
@@ -55,6 +65,8 @@ class Recorder:
         Args:
             timestamp: when the restock occurred
         """
+        if timestamp > self.script_end:
+            return
         assert timestamp >= 0
         self.num_restocks += 1
         if self.num_restocks >= len(self.restocks):
@@ -76,7 +88,11 @@ class Recorder:
         Gets a numpy-summary of the performance metrics over the recording
         time-window.
         returns
-            (queue_time_average, service_time_average) for each bin-window
+            (
+                queue_time_average,
+                service_time_average,
+                stock_average
+            ) for each bin-window (bins have `self.sample_rate` width, in time units)
         """
         num_bins = math.floor(self.oldest_timestamp / self.sample_rate) + 1
         # make all zeros in the denominator into 1s
@@ -85,10 +101,14 @@ class Recorder:
         for index, val in enumerate(self.num_records):
             if val == 0:
                 mask[index] = 1
-        
+
+        last_bin = math.floor(self.oldest_timestamp / self.sample_rate)
+
         return (
             np.divide(np.resize(self.queue_waiting_numerator, num_bins),
                       np.resize(self.num_records + mask, num_bins)),
             np.divide(np.resize(self.service_time_numerator, num_bins),
+                      np.resize(self.num_records + mask, num_bins)),
+            np.divide(np.resize(self.stock_numerator, num_bins),
                       np.resize(self.num_records + mask, num_bins))
         )

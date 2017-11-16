@@ -40,16 +40,22 @@ class ReturnInventoryRequest:
     def __init__(self,
                  original_request: script_parser.InventoryRequest,
                  quantity: int,
+                 queue_time: float,
+                 service_time: float,
                  timestamp: float):
         """
         Creates this ReturnInventoryRequest
         Args:
             original_request: the original InventoryRequest that's now failed
             quantity: the number of items to give back
+            queue_time: the amount of time spent queueing
+            service_time: the amount of time spent in bin service
             timestamp: when to put them back
         """
         self.original_request = original_request
         self.quantity = quantity
+        self.queue_time = queue_time
+        self.service_time = service_time
         self.timestamp = timestamp
 
 
@@ -110,10 +116,12 @@ def perform_experiment(num_bins, filename):
     script_name = filename
     script = script_parser.parse_script(script_name)
     rctr = reactor.Reactor(0, num_bins, 0, SERVICE_TIME, RAND_SEED)
-    script_timespan = script[-1].timestamp - script[0].timestamp
-    recorder = history_recorder.Recorder(script_timespan / NUM_METRIC_BINS)
+    script_start = script[0].timestamp
+    script_end = script[-1].timestamp
+    script_timespan = script_end - script_start
+    recorder = history_recorder.Recorder(script_timespan / NUM_METRIC_BINS, script_end)
 
-    # iterate while there's still work to do
+    # iterate while there's still work to do, and 
     while len(script) > 0:
         curr_item = script[0]
         del script[0]
@@ -121,6 +129,12 @@ def perform_experiment(num_bins, filename):
         if isinstance(curr_item, ReturnInventoryRequest):
             # we need to reshelve some inventory
             rctr.add_stock(curr_item.quantity, curr_item.timestamp)
+            recorder.record_event(
+                curr_item.queue_time,
+                curr_item.service_time,
+                rctr.stock_available(),
+                curr_item.timestamp
+            )
         if isinstance(curr_item, script_parser.InventoryRestock):
             # natural restock
             rctr.add_stock(curr_item.quantity, curr_item.timestamp)
@@ -135,6 +149,8 @@ def perform_experiment(num_bins, filename):
                     ReturnInventoryRequest(
                         curr_item.original_request,
                         curr_item.reserved_so_far,
+                        curr_item.queue_time_so_far,
+                        curr_item.service_time_so_far,
                         curr_item.timestamp
                     )
                 )
@@ -156,8 +172,9 @@ def perform_experiment(num_bins, filename):
                 # if we've now got everything, record successful run
                 if qty_reserved + curr_item.reserved_so_far == curr_item.original_request.quantity:
                     recorder.record_event(
-                        curr_item.queue_time_so_far + queue_time,
-                        curr_item.service_time_so_far + service_time,
+                        curr_item.queue_time_so_far,
+                        curr_item.service_time_so_far,
+                        rctr.stock_available(),
                         completed_time
                     )
                 # otherwise we need to check another bin
@@ -187,6 +204,7 @@ def perform_experiment(num_bins, filename):
                 recorder.record_event(
                     queue_time,
                     service_time,
+                    rctr.stock_available(),
                     curr_item.timestamp + queue_time + service_time
                 )
     return recorder
@@ -209,7 +227,7 @@ def plot_range_of_bins(max_bins, fname):
     avg_service_times = np.zeros_like(search_space, dtype=float)
     for index in range(len(search_space)):
         recorder = perform_experiment(int(search_space[index]), fname)
-        queue_times_avgs, service_times_avgs = recorder.get_timelog()
+        queue_times_avgs, service_times_avgs, _ = recorder.get_timelog()
         avg_queue_times[index] = np.average(queue_times_avgs)
         avg_service_times[index] = np.average(service_times_avgs)
         print(search_space[index])
@@ -224,14 +242,13 @@ def plot_range_of_bins(max_bins, fname):
 def plot_timeplot(num_bins, fname):
     assert num_bins > 0
     result = perform_experiment(num_bins, fname)
-    queue_times_avgs, service_times_avgs = result.get_timelog()
+    queue_times_avgs, service_times_avgs, stock_avgs = result.get_timelog()
     x_axis_values = np.zeros_like(queue_times_avgs, dtype=float)
     for i in range(len(x_axis_values)):
         x_axis_values[i] = result.sample_rate * i
-    fig, ax1 = plt.subplots()
-    plt.title('Avg. Response Time over Time')
+    fig, (ax1, ax2, ax3) = plt.subplots(3, sharex=True)
     ax1.set_xlabel('Elapsed Time')
-    ax1.set_ylabel('Avg. Response Time (by component)')
+    ax1.set_ylabel('Resp. Time')
     ax1.plot(
         x_axis_values,
         queue_times_avgs,
@@ -245,17 +262,25 @@ def plot_timeplot(num_bins, fname):
     for restock in result.get_restocks():
         ax1.axvline(x=restock, linestyle='-.', color='c')
     ax1.legend(loc=0)
+    ax1.set_ylim(ymin=0)
 
-    ax2 = ax1.twinx()
     ax2.plot(
         x_axis_values,
         np.resize(result.num_records, len(x_axis_values)) / result.sample_rate,
         'g:',
-        label='requests / time unit'
+        label='requests/s'
     )
     ax2.set_ylabel('requests/s')
     ax2.legend(loc=0)
-    fig.tight_layout()
+    ax2.set_ylim(ymin=0)
+
+    ax3.plot(
+        x_axis_values,
+        stock_avgs,
+        label='supply'
+    )
+    ax3.legend(loc=0)
+    ax3.set_ylim(ymin=0)
     plt.show()
 
 
