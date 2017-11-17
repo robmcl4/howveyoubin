@@ -126,7 +126,8 @@ class Reactor:
                 soonest_time = available_after
         
         stock = self.stock_available()
-        
+        del self.bins[:]
+
         # create new bins
         stock_per_bin = math.ceil(stock / num_bins)
         stock_assigned = 0
@@ -146,7 +147,7 @@ class Reactor:
         # all for that time
         service_time = self.rand.expovariate(1 / float(self.service_time))
         for bin_ in self.bins:
-            bin_.locked_times.append(soonest_time, soonest_time + service_time)        
+            bin_.locked_times.append((soonest_time, soonest_time + service_time))
         return soonest_time + service_time
 
 

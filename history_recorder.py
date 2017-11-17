@@ -28,9 +28,50 @@ class Recorder:
         self.stock_numerator = np.zeros(1024, dtype=np.uint64)
         # the number of records seen in each sample bin
         self.num_records = np.zeros(1024, dtype=np.uint64)
+        # the complete list of timestamps when we did restocks
         self.restocks = np.zeros(1024, dtype=float)
         self.num_restocks = 0
+        # the number of /incoming/ (not completed) requests in each time-bin
+        self.num_started_requests = np.zeros(1024, dtype=np.uint64)
+        self.oldest_started_request_timestamp = 0
+        # the number of bins (as two parallel arrays)
+        self.bin_nums = np.zeros(1024, dtype=np.uint16)
+        self.bin_nums_timestamps = np.zeros(1024, dtype=float)
+        self.bin_nums_next_index = 0
         self.script_end = script_end
+
+    def record_num_bins(self, num_bins: int, timestamp: float):
+        """
+        Record how many bins we're using at a given timestamp
+        Args:
+            num_bins: int, the number of bins in use
+            timestamp: float, what time this quantity of bins are in use
+        """
+        assert timestamp >= 0
+        assert num_bins > 0
+        if self.bin_nums_next_index >= len(self.bin_nums):
+            new_size = len(self.bin_nums) * 2
+            assert new_size <= 32768
+            self.bin_nums.resize(new_size)
+            self.bin_nums_timestamps.resize(new_size)
+        self.bin_nums[self.bin_nums_next_index] = num_bins
+        self.bin_nums_timestamps[self.bin_nums_next_index] = timestamp
+        self.bin_nums_next_index += 1
+
+    def record_start_request(self, timestamp: float):
+        """
+        Record that a request has begun
+        Args:
+            timestamp: the time when this request begins
+        """
+        assert timestamp > 0
+        self.oldest_started_request_timestamp = max(self.oldest_started_request_timestamp, timestamp)
+        bin_index = math.floor(timestamp / self.sample_rate)
+        if len(self.num_started_requests) < bin_index:
+            new_size = len(self.num_started_requests) * 2
+            assert new_size <= 32768
+            self.num_started_requests.resize(new_size)
+        self.num_started_requests[bin_index] += 1
 
     def record_event(self, queue_time: float, service_time: float, stock_left: int, timestamp: float):
         """
@@ -112,3 +153,69 @@ class Recorder:
             np.divide(np.resize(self.stock_numerator, num_bins),
                       np.resize(self.num_records + mask, num_bins))
         )
+
+    def get_avg_service_time_at(self, timestamp: float) -> float:
+        """
+        Gets the average time spent in service at the given timestamp
+        Args:
+            timestamp: when to check
+        Retutrns:
+            the avg service time
+        """
+        bin_index = math.floor(timestamp / self.sample_rate)
+        num = self.service_time_numerator[bin_index]
+        denom = self.num_records[bin_index]
+        if denom == 0:
+            return 0
+        return num / denom
+
+    def get_avg_queue_time_at(self, timestamp: float) -> float:
+        """
+        Gets the average time spent in queue at the given timestamp
+        Args:
+            timestamp: when to check
+        Retutrns:
+            the avg queue time
+        """
+        bin_index = math.floor(timestamp / self.sample_rate)
+        num = self.queue_waiting_numerator[bin_index]
+        denom = self.num_records[bin_index]
+        if denom == 0:
+            return 0
+        return num / denom
+
+    def get_avg_stock_at(self, timestamp: float) -> float:
+        """
+        Gets the average stock in this timestamp's windowed bin
+        Args:
+            timestamp: when to check
+        Retutrns:
+            the average stock
+        """
+        bin_index = math.floor(timestamp / self.sample_rate)
+        num = self.stock_numerator[bin_index]
+        denom = self.num_records[bin_index]
+        if denom == 0:
+            return 0
+        return num / denom
+
+    def get_request_rate_at(self, timestamp: float) -> float:
+        """
+        Gets the requests / time unit at this timestamp's windowed bin
+        Args:
+            timestamp: when to check
+        Returns:
+            the average request rate
+        """
+        bin_index = math.floor(timestamp / self.sample_rate)
+        # if this bin isn't full yet we need to adjust for that
+        if self.oldest_started_request_timestamp < self.sample_rate * (bin_index + 1):
+            bin_time_elapsed = self.oldest_started_request_timestamp % self.sample_rate
+            prev_rate = 0
+            if bin_index > 0:
+                prev_rate = self.num_started_requests[bin_index-1] / self.sample_rate
+            curr_rate = prev_rate
+            if bin_time_elapsed != 0:
+                curr_rate = self.num_started_requests[bin_index] / bin_time_elapsed
+            return curr_rate * 0.7 + prev_rate * 0.3
+        return self.num_started_requests[bin_index] / self.sample_rate

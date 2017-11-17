@@ -12,7 +12,7 @@ import matplotlib.pyplot as plt
 import script_parser
 import reactor
 import history_recorder
-
+import adaptors
 
 # initial number of bins
 INITIAL_BINS = 400
@@ -29,6 +29,10 @@ SERVICE_TIME = 0.15
 # the number of bins to use for sampling performance metrics over the course
 # of evaluating an entire script
 NUM_METRIC_BINS = 50
+
+
+# the number of time steps between invoking self-adaptive component
+TIME_BETWEEN_ADAPTATION = 10
 
 
 class ReturnInventoryRequest:
@@ -95,6 +99,20 @@ class RetryInventoryRequest:
         self.bins_checked = 1
 
 
+class AdaptNow:
+    """
+    Represents that we should call self-adaptive component at this time
+    """
+
+    def __init__(self, timestamp: float):
+        """
+        Constructs the adapt command
+        Args:
+            timestamp: float, when to adapt
+        """
+        self.timestamp = timestamp
+
+
 def insert_action_sorted(lst, action):
     """
     Inserts the given action in-place into the given list
@@ -120,12 +138,31 @@ def perform_experiment(num_bins, filename):
     script_end = script[-1].timestamp
     script_timespan = script_end - script_start
     recorder = history_recorder.Recorder(script_timespan / NUM_METRIC_BINS, script_end)
+    adaptor = adaptors.DummyAdaptor()
+
+    for ts in np.arange(script_start, script_end, TIME_BETWEEN_ADAPTATION):
+        a = AdaptNow(ts)
+        insert_action_sorted(script, a)
+
+    recorder.record_num_bins(num_bins, 0)
 
     # iterate while there's still work to do, and 
     while len(script) > 0:
         curr_item = script[0]
         del script[0]
 
+        if isinstance(curr_item, AdaptNow):
+            # we adapt!
+            new_bin_num = adaptor.adapt(
+                rctr.num_bins(),
+                recorder.get_avg_service_time_at(curr_item.timestamp),
+                recorder.get_avg_queue_time_at(curr_item.timestamp),
+                recorder.get_request_rate_at(curr_item.timestamp),
+                rctr.stock_available(),
+                curr_item.timestamp
+            )
+            rctr.reshape_num_bins(new_bin_num, curr_item.timestamp)
+            recorder.record_num_bins(new_bin_num, curr_item.timestamp)
         if isinstance(curr_item, ReturnInventoryRequest):
             # we need to reshelve some inventory
             rctr.add_stock(curr_item.quantity, curr_item.timestamp)
@@ -183,6 +220,7 @@ def perform_experiment(num_bins, filename):
                     curr_item.timestamp = completed_time
                     insert_action_sorted(script, curr_item)
         elif isinstance(curr_item, script_parser.InventoryRequest):
+            recorder.record_start_request(curr_item.timestamp)
             queue_time, service_time, bin_id, qty = rctr.reserve_stock(
                 curr_item.quantity,
                 curr_item.timestamp
@@ -246,7 +284,7 @@ def plot_timeplot(num_bins, fname):
     x_axis_values = np.zeros_like(queue_times_avgs, dtype=float)
     for i in range(len(x_axis_values)):
         x_axis_values[i] = result.sample_rate * i
-    fig, (ax1, ax2, ax3) = plt.subplots(3, sharex=True)
+    fig, (ax1, ax2, ax3, ax4) = plt.subplots(4, sharex=True)
     ax1.set_xlabel('Elapsed Time')
     ax1.set_ylabel('Resp. Time')
     ax1.plot(
@@ -266,7 +304,7 @@ def plot_timeplot(num_bins, fname):
 
     ax2.plot(
         x_axis_values,
-        np.resize(result.num_records, len(x_axis_values)) / result.sample_rate,
+        np.resize(result.num_started_requests, len(x_axis_values)) / result.sample_rate,
         'g:',
         label='requests/s'
     )
@@ -277,10 +315,22 @@ def plot_timeplot(num_bins, fname):
     ax3.plot(
         x_axis_values,
         stock_avgs,
+        'r--',
         label='supply'
     )
     ax3.legend(loc=0)
+    ax3.set_ylabel('items')
     ax3.set_ylim(ymin=0)
+
+    ax4.plot(
+        np.resize(result.bin_nums_timestamps, result.bin_nums_next_index),
+        np.resize(result.bin_nums, result.bin_nums_next_index),
+        label='number of bins'
+    )
+    ax4.legend(loc=0)
+    ax4.set_ylabel('bins')
+    ax4.set_ylim(ymin=0)
+
     plt.show()
 
 
