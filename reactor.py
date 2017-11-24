@@ -161,7 +161,15 @@ class Reactor:
         for bin_ in self.bins:
             ret += bin_.remaining_stock()
         return ret
-
+    
+    def avg_utilization(self, since: float, to: float) -> float:
+        """
+        Gets the average bin utilization as a percent of time
+        Returns:
+            float, from 0 to 1, percent of time spent utilized
+        """
+        s = sum(x.utilization_percent(since, to) for x in self.bins)
+        return s / len(self.bins)
 
 class Bin:
     def __init__(self, stock: int, created_at: float, service_time: float, seed: int):
@@ -255,3 +263,24 @@ class Bin:
             int, the stock remaining
         """
         return self.stock[-1][1]
+
+    def utilization_percent(self, since: float, to: float) -> int:
+        """
+        Gets the utilization percent of this bin, as a percent of time
+        spent busy over the given interval.
+        Returns:
+            float, from 0 to 1, indicating percent of time being utilized
+        """
+        if to == since:
+            return 1
+        since = max(since, self.locked_times[0][0])
+        cumulative_time_locked = 0
+        for start_lock, end_lock in self.locked_times:
+            if start_lock >= to:
+                continue
+            if end_lock < since:
+                continue
+            start_lock = max(since, start_lock)
+            end_lock = min(to, end_lock)
+            cumulative_time_locked += end_lock - start_lock
+        return cumulative_time_locked / (to - since)

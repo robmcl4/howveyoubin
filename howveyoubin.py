@@ -46,6 +46,7 @@ class ReturnInventoryRequest:
                  quantity: int,
                  queue_time: float,
                  service_time: float,
+                 bins_checked: int,
                  timestamp: float):
         """
         Creates this ReturnInventoryRequest
@@ -54,12 +55,14 @@ class ReturnInventoryRequest:
             quantity: the number of items to give back
             queue_time: the amount of time spent queueing
             service_time: the amount of time spent in bin service
+            bins_checked: the number of bins this request had to check
             timestamp: when to put them back
         """
         self.original_request = original_request
         self.quantity = quantity
         self.queue_time = queue_time
         self.service_time = service_time
+        self.bins_checked = bins_checked
         self.timestamp = timestamp
 
 
@@ -138,7 +141,7 @@ def perform_experiment(num_bins, filename):
     script_end = script[-1].timestamp
     script_timespan = script_end - script_start
     recorder = history_recorder.Recorder(script_timespan / NUM_METRIC_BINS, script_end)
-    adaptor = adaptors.DummyAdaptor()
+    adaptor = adaptors.PIAdaptor()
 
     for ts in np.arange(script_start, script_end, TIME_BETWEEN_ADAPTATION):
         a = AdaptNow(ts)
@@ -159,6 +162,8 @@ def perform_experiment(num_bins, filename):
                 recorder.get_avg_queue_time_at(curr_item.timestamp),
                 recorder.get_request_rate_at(curr_item.timestamp),
                 rctr.stock_available(),
+                recorder.get_bins_checked_at(curr_item.timestamp),
+                rctr.avg_utilization(max(0, curr_item.timestamp - TIME_BETWEEN_ADAPTATION), curr_item.timestamp),
                 curr_item.timestamp
             )
             rctr.reshape_num_bins(new_bin_num, curr_item.timestamp)
@@ -170,6 +175,7 @@ def perform_experiment(num_bins, filename):
                 curr_item.queue_time,
                 curr_item.service_time,
                 rctr.stock_available(),
+                curr_item.bins_checked,
                 curr_item.timestamp
             )
         if isinstance(curr_item, script_parser.InventoryRestock):
@@ -188,6 +194,7 @@ def perform_experiment(num_bins, filename):
                         curr_item.reserved_so_far,
                         curr_item.queue_time_so_far,
                         curr_item.service_time_so_far,
+                        curr_item.bins_checked,
                         curr_item.timestamp
                     )
                 )
@@ -212,6 +219,7 @@ def perform_experiment(num_bins, filename):
                         curr_item.queue_time_so_far,
                         curr_item.service_time_so_far,
                         rctr.stock_available(),
+                        curr_item.bins_checked + 1,
                         completed_time
                     )
                 # otherwise we need to check another bin
@@ -243,6 +251,7 @@ def perform_experiment(num_bins, filename):
                     queue_time,
                     service_time,
                     rctr.stock_available(),
+                    1,
                     curr_item.timestamp + queue_time + service_time
                 )
     return recorder
@@ -274,6 +283,7 @@ def plot_range_of_bins(max_bins, fname):
     plt.ylabel('Avg. Response Time')
     plt.bar(search_space, avg_queue_times, 1, label='avg. queue time')
     plt.bar(search_space, avg_service_times, 1, bottom=avg_queue_times, label='avg. service time')
+    plt.legend()
     plt.show()
 
 

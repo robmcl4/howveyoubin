@@ -26,6 +26,8 @@ class Recorder:
         self.service_time_numerator = np.zeros(1024, dtype=float)
         # same as above, except for current inventory stock
         self.stock_numerator = np.zeros(1024, dtype=np.uint64)
+        # same as above, except for number of bins checked before completion
+        self.checked_numerator = np.zeros(1024, dtype=np.uint64)
         # the number of records seen in each sample bin
         self.num_records = np.zeros(1024, dtype=np.uint64)
         # the complete list of timestamps when we did restocks
@@ -73,18 +75,20 @@ class Recorder:
             self.num_started_requests.resize(new_size)
         self.num_started_requests[bin_index] += 1
 
-    def record_event(self, queue_time: float, service_time: float, stock_left: int, timestamp: float):
+    def record_event(self, queue_time: float, service_time: float, stock_left: int, bins_checked: int, timestamp: float):
         """
         Record that an event happened with the given queue and service time
         Args:
             queue_time - float, time spent queueing
             service_time - float, time spent in the service worker (bin)
             stock_left - int, the number of items left in stock after this request
+            bins_checked - int, the number of bins this request had to check before it completed
             timestamp - float, the timestamp when this succeeded
         """
         if timestamp > self.script_end:
             return
         assert timestamp >= 0
+        assert bins_checked > 0
         self.oldest_timestamp = max(self.oldest_timestamp, timestamp)
         bin_index = math.floor(timestamp / self.sample_rate)
         # if we need to grow, do that
@@ -98,6 +102,7 @@ class Recorder:
         self.queue_waiting_numerator[bin_index] += queue_time
         self.service_time_numerator[bin_index] += service_time
         self.stock_numerator[bin_index] += stock_left
+        self.checked_numerator[bin_index] += bins_checked
         self.num_records[bin_index] += 1
 
     def record_restock(self, timestamp: float):
@@ -142,8 +147,6 @@ class Recorder:
         for index, val in enumerate(self.num_records):
             if val == 0:
                 mask[index] = 1
-
-        last_bin = math.floor(self.oldest_timestamp / self.sample_rate)
 
         return (
             np.divide(np.resize(self.queue_waiting_numerator, num_bins),
@@ -219,3 +222,18 @@ class Recorder:
                 curr_rate = self.num_started_requests[bin_index] / bin_time_elapsed
             return curr_rate * 0.7 + prev_rate * 0.3
         return self.num_started_requests[bin_index] / self.sample_rate
+
+    def get_bins_checked_at(self, timestamp: float) -> float:
+        """
+        Gets the average number of bins checked before a request completes
+        Args:
+            timestamp: when to check
+        Returns:
+            the average number of bins checked
+        """
+        bin_index = math.floor(timestamp / self.sample_rate)
+        num = self.checked_numerator[bin_index]
+        denom = self.num_records[bin_index]
+        if denom == 0:
+            return 0
+        return num / denom
