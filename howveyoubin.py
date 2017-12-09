@@ -124,7 +124,7 @@ def insert_action_sorted(lst, action):
     assert insert_index == len(lst)-1 or lst[insert_index].timestamp <= lst[insert_index+1].timestamp
 
 
-def perform_experiment(num_bins, filename):
+def perform_experiment(num_bins, filename, adaptor):
     """
     Performs the experiment given the supplied number of bins.
     Returns a Recorder object
@@ -143,7 +143,7 @@ def perform_experiment(num_bins, filename):
 
     recorder.record_num_bins(num_bins, 0)
 
-    # iterate while there's still work to do, and 
+    # iterate while there's still work to do, and
     while len(script) > 0:
         curr_item = script[0]
         del script[0]
@@ -256,9 +256,24 @@ def handle_arguments():
     parser.add_argument("filename", help="CSV filename to run")
     parser.add_argument("max_bins", type=int, help="max number of bins to search")
     parser.add_argument("-t",
-        "--time-plot", 
+        "--time-plot",
         help="plot a time-plot of performance with the given number of bins",
         action='store_true')
+    parser.add_argument("-p",
+        "--proportional-gain",
+        type=float,
+        dest="kp",
+        default=1.0)
+    parser.add_argument("-i",
+        "--integral-gain",
+        type=float,
+        dest="ki",
+        default=1.0)
+    parser.add_argument("-d",
+        "--derivative-gain",
+        type=float,
+        dest="kd",
+        default=1.0)
     return parser.parse_args()
 
 
@@ -281,10 +296,12 @@ def plot_range_of_bins(max_bins, fname):
     plt.show()
 
 
-def plot_timeplot(num_bins, fname):
+def plot_timeplot(num_bins, fname, kp, ki, kd):
     assert num_bins > 0
-    result = perform_experiment(num_bins, fname)
+    adaptor = adaptors.PIDAdaptor(kp, ki, kd)
+    result = perform_experiment(num_bins, fname, adaptor)
     queue_times_avgs, service_times_avgs, stock_avgs = result.get_timelog()
+    response_times_avgs = [sum(times) for times in zip(queue_times_avgs, service_times_avgs)]
     x_axis_values = np.zeros_like(queue_times_avgs, dtype=float)
     for i in range(len(x_axis_values)):
         x_axis_values[i] = result.sample_rate * i
@@ -300,6 +317,11 @@ def plot_timeplot(num_bins, fname):
         x_axis_values,
         service_times_avgs,
         label='service time'
+    )
+    ax1.plot(
+        x_axis_values,
+        response_times_avgs,
+        label='response time'
     )
     for restock in result.get_restocks():
         ax1.axvline(x=restock, linestyle='-.', color='c')
@@ -335,13 +357,14 @@ def plot_timeplot(num_bins, fname):
     ax4.set_ylabel('bins')
     ax4.set_ylim(ymin=0)
 
-    plt.show()
-
+    # plt.show()
+    print('kp', 'ki', 'kd', 'avg_rt', 'max_rt', 'cum_rt')
+    print(kp, ki, kd, np.mean(response_times_avgs), max(response_times_avgs), sum(response_times_avgs))
 
 def main():
     args = handle_arguments()
     if args.time_plot:
-        plot_timeplot(args.max_bins, args.filename)
+        plot_timeplot(args.max_bins, args.filename, args.kp, args.ki, args.kd)
     else:
         plot_range_of_bins(args.max_bins, args.filename)
 
