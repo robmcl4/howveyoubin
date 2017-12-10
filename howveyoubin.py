@@ -141,7 +141,7 @@ def perform_experiment(num_bins, filename):
     script_end = script[-1].timestamp
     script_timespan = script_end - script_start
     recorder = history_recorder.Recorder(script_timespan / NUM_METRIC_BINS, script_end)
-    adaptor = adaptors.PIAdaptor()
+    adaptor = adaptors.RLAdaptor()
 
     for ts in np.arange(script_start, script_end, TIME_BETWEEN_ADAPTATION):
         a = AdaptNow(ts)
@@ -158,14 +158,15 @@ def perform_experiment(num_bins, filename):
             # we adapt!
             new_bin_num = adaptor.adapt(
                 rctr.num_bins(),
-                recorder.get_avg_service_time_at(curr_item.timestamp),
-                recorder.get_avg_queue_time_at(curr_item.timestamp),
+                recorder.get_avg_service_time_between(max(0, curr_item.timestamp - TIME_BETWEEN_ADAPTATION), curr_item.timestamp),
+                recorder.get_avg_queue_time_between(max(0, curr_item.timestamp - TIME_BETWEEN_ADAPTATION), curr_item.timestamp),
                 recorder.get_request_rate_at(curr_item.timestamp),
                 rctr.stock_available(),
                 recorder.get_bins_checked_at(curr_item.timestamp),
                 rctr.avg_utilization(max(0, curr_item.timestamp - TIME_BETWEEN_ADAPTATION), curr_item.timestamp),
                 curr_item.timestamp
             )
+            print(new_bin_num)
             rctr.reshape_num_bins(new_bin_num, curr_item.timestamp)
             recorder.record_num_bins(new_bin_num, curr_item.timestamp)
         if isinstance(curr_item, ReturnInventoryRequest):
@@ -254,6 +255,7 @@ def perform_experiment(num_bins, filename):
                     1,
                     curr_item.timestamp + queue_time + service_time
                 )
+    adaptor.save()
     return recorder
 
 

@@ -157,32 +157,36 @@ class Recorder:
                       np.resize(self.num_records + mask, num_bins))
         )
 
-    def get_avg_service_time_at(self, timestamp: float) -> float:
+    def get_avg_service_time_between(self, begin: float, end: float) -> float:
         """
-        Gets the average time spent in service at the given timestamp
-        Args:
-            timestamp: when to check
+        Gets the average time spent in service during the given timestamps
         Retutrns:
             the avg service time
         """
-        bin_index = math.floor(timestamp / self.sample_rate)
-        num = self.service_time_numerator[bin_index]
-        denom = self.num_records[bin_index]
+        bin_index_1 = math.floor(begin / self.sample_rate)
+        bin_index_2 = math.floor(end / self.sample_rate)
+        num = 0
+        denom = 0
+        for bin_index in range(bin_index_1, bin_index_2+1):
+            num += self.service_time_numerator[bin_index]
+            denom += self.num_records[bin_index]
         if denom == 0:
             return 0
         return num / denom
 
-    def get_avg_queue_time_at(self, timestamp: float) -> float:
+    def get_avg_queue_time_between(self, begin: float, end: float) -> float:
         """
-        Gets the average time spent in queue at the given timestamp
-        Args:
-            timestamp: when to check
+        Gets the average time spent in queue between the given timestamps
         Retutrns:
             the avg queue time
         """
-        bin_index = math.floor(timestamp / self.sample_rate)
-        num = self.queue_waiting_numerator[bin_index]
-        denom = self.num_records[bin_index]
+        bin_index_1 = math.floor(begin / self.sample_rate)
+        bin_index_2 = math.floor(end / self.sample_rate)
+        num = 0
+        denom = 0
+        for bin_index in range(bin_index_1, bin_index_2+1):
+            num += self.queue_waiting_numerator[bin_index]
+            denom += self.num_records[bin_index]
         if denom == 0:
             return 0
         return num / denom
