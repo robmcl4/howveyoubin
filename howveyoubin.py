@@ -263,17 +263,17 @@ def handle_arguments():
         "--proportional-gain",
         type=float,
         dest="kp",
-        default=1.0)
+        default=3.75)
     parser.add_argument("-i",
         "--integral-gain",
         type=float,
         dest="ki",
-        default=1.0)
+        default=0.084)
     parser.add_argument("-d",
         "--derivative-gain",
         type=float,
         dest="kd",
-        default=1.0)
+        default=36.45)
     return parser.parse_args()
 
 
@@ -357,9 +357,8 @@ def plot_timeplot(num_bins, fname, kp, ki, kd):
     ax4.set_ylabel('bins')
     ax4.set_ylim(ymin=0)
 
-    # plt.show()
-    print('kp', 'ki', 'kd', 'avg_rt', 'max_rt', 'cum_rt')
-    print(kp, ki, kd, np.mean(response_times_avgs), max(response_times_avgs), sum(response_times_avgs))
+    plt.show()
+
 
 def main():
     args = handle_arguments()
