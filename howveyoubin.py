@@ -160,6 +160,9 @@ def perform_experiment(num_bins, filename, adaptor):
                 rctr.avg_utilization(max(0, curr_item.timestamp - TIME_BETWEEN_ADAPTATION), curr_item.timestamp),
                 curr_item.timestamp
             )
+            assert 1 < new_bin_num
+            assert new_bin_num < 1000
+
             rctr.reshape_num_bins(new_bin_num, curr_item.timestamp)
             recorder.record_num_bins(new_bin_num, curr_item.timestamp)
         if isinstance(curr_item, ReturnInventoryRequest):
@@ -251,6 +254,17 @@ def perform_experiment(num_bins, filename, adaptor):
     return recorder
 
 
+def tuple_of_two(t):
+    try:
+        x = float(t.split(',')[0])
+        y = float(t.split(',')[1])
+        tup = (x, y)
+
+        return tup
+    except:
+        raise argparse.ArgumentTypeError("Not a tuple of two ints, try again i guess...")
+
+
 def handle_arguments():
     parser = argparse.ArgumentParser()
     parser.add_argument("filename", help="CSV filename to run")
@@ -261,19 +275,24 @@ def handle_arguments():
         action='store_true')
     parser.add_argument("-p",
         "--proportional-gain",
-        type=float,
+        type=tuple_of_two,
         dest="kp",
-        default=3.75)
+        default=(0.0, 1.0))
     parser.add_argument("-i",
         "--integral-gain",
-        type=float,
+        type=tuple_of_two,
         dest="ki",
-        default=0.084)
+        default=(0.0, 1.0))
     parser.add_argument("-d",
         "--derivative-gain",
-        type=float,
+        type=tuple_of_two,
         dest="kd",
-        default=36.45)
+        default=(0.0, 1.0))
+    parser.add_argument("-m",
+        "--integral-extrema",
+        type=tuple_of_two,
+        dest="iex",
+        default=(-1.0, 1.0))
     return parser.parse_args()
 
 
@@ -296,9 +315,9 @@ def plot_range_of_bins(max_bins, fname):
     plt.show()
 
 
-def plot_timeplot(num_bins, fname, kp, ki, kd):
+def plot_timeplot(num_bins, fname, kp, ki, kd, i_min, i_max):
     assert num_bins > 0
-    adaptor = adaptors.PIDAdaptor(kp, ki, kd)
+    adaptor = adaptors.PIDAdaptor(kp, ki, kd, i_min, i_max)
     result = perform_experiment(num_bins, fname, adaptor)
     queue_times_avgs, service_times_avgs, stock_avgs = result.get_timelog()
     response_times_avgs = [sum(times) for times in zip(queue_times_avgs, service_times_avgs)]
@@ -358,12 +377,30 @@ def plot_timeplot(num_bins, fname, kp, ki, kd):
     ax4.set_ylim(ymin=0)
 
     plt.show()
+    avg_rt = np.mean(response_times_avgs)
+    max_rt = max(response_times_avgs)
+    cum_rt = sum(response_times_avgs)
+    std_rt = np.std(response_times_avgs)
 
+    print(kp, ki, kd, avg_rt, max_rt, cum_rt, i_min, i_max, std_rt)
 
 def main():
     args = handle_arguments()
     if args.time_plot:
-        plot_timeplot(args.max_bins, args.filename, args.kp, args.ki, args.kd)
+        num_samples = 5
+        kp_samples = np.linspace(args.kp[0], args.kp[1], num_samples)[1:-1] if args.kp[0] != args.kp[1] else [args.kp[0]]
+        ki_samples = np.linspace(args.ki[0], args.ki[1], num_samples)[1:-1] if args.ki[0] != args.ki[1] else [args.ki[0]]
+        kd_samples = np.linspace(args.kd[0], args.kd[1], num_samples)[1:-1] if args.kd[0] != args.kd[1] else [args.kd[0]]
+
+        for kp in kp_samples:
+            for ki in ki_samples:
+                for kd in kd_samples:
+                    for i_min in [args.iex[0]]:
+                        for i_max in [args.iex[1]]:
+                            try:
+                                plot_timeplot(args.max_bins, args.filename, kp, ki, kd, i_min, i_max)
+                            except:
+                                print(kp, ki, kd, float("inf"), float("inf"), float("inf"), i_min, i_max, float("inf"))
     else:
         plot_range_of_bins(args.max_bins, args.filename)
 
