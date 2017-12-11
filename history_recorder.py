@@ -69,7 +69,7 @@ class Recorder:
         assert timestamp > 0
         self.oldest_started_request_timestamp = max(self.oldest_started_request_timestamp, timestamp)
         bin_index = math.floor(timestamp / self.sample_rate)
-        if len(self.num_started_requests) < bin_index:
+        if len(self.num_started_requests) <= bin_index:
             new_size = len(self.num_started_requests) * 2
             assert new_size <= 32768
             self.num_started_requests.resize(new_size)
@@ -92,12 +92,13 @@ class Recorder:
         self.oldest_timestamp = max(self.oldest_timestamp, timestamp)
         bin_index = math.floor(timestamp / self.sample_rate)
         # if we need to grow, do that
-        if len(self.num_records) < bin_index:
+        if len(self.num_records) <= bin_index:
             new_size = len(self.num_records) * 2
             assert new_size <= 32768
             self.queue_waiting_numerator.resize(new_size)
             self.service_time_numerator.resize(new_size)
             self.stock_numerator.resize(new_size)
+            self.checked_numerator.resize(new_size)
             self.num_records.resize(new_size)
         self.queue_waiting_numerator[bin_index] += queue_time
         self.service_time_numerator[bin_index] += service_time
@@ -230,7 +231,7 @@ class Recorder:
             if bin_index > 0:
                 prev_rate = self.num_started_requests[bin_index-1] / self.sample_rate
             curr_rate = prev_rate
-            if bin_time_elapsed != 0:
+            if bin_time_elapsed != 0 and len(self.num_started_requests) > bin_index:
                 curr_rate = self.num_started_requests[bin_index] / bin_time_elapsed
             return curr_rate * 0.7 + prev_rate * 0.3
         return self.num_started_requests[bin_index] / self.sample_rate
