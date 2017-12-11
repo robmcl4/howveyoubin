@@ -380,8 +380,9 @@ def plot_timeplot(num_bins, fname, kp, ki, kd, i_min, i_max):
     max_rt = max(response_times_avgs)
     cum_rt = sum(response_times_avgs)
     std_rt = np.std(response_times_avgs)
+    std_bc = np.std(result.bin_nums)
 
-    print(kp, ki, kd, avg_rt, max_rt, cum_rt, i_min, i_max, std_rt)
+    print(kp, ki, kd, avg_rt, max_rt, cum_rt, i_min, i_max, std_rt, std_bc)
 
 def main():
     args = handle_arguments()
@@ -399,7 +400,7 @@ def main():
                             try:
                                 plot_timeplot(args.max_bins, args.filename, kp, ki, kd, i_min, i_max)
                             except:
-                                print(kp, ki, kd, float("inf"), float("inf"), float("inf"), i_min, i_max, float("inf"))
+                                print(kp, ki, kd, float("inf"), float("inf"), float("inf"), i_min, i_max, float("inf"), float("inf"))
     else:
         plot_range_of_bins(args.max_bins, args.filename)
 
