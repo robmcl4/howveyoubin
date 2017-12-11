@@ -7,7 +7,7 @@ simulates the lettuce inventory-management system
 
 import argparse
 import numpy as np
-import matplotlib.pyplot as plt
+# import matplotlib.pyplot as plt
 
 import script_parser
 import reactor
@@ -320,62 +320,62 @@ def plot_timeplot(num_bins, fname, kp, ki, kd, i_min, i_max):
     result = perform_experiment(num_bins, fname, adaptor)
     queue_times_avgs, service_times_avgs, stock_avgs = result.get_timelog()
     response_times_avgs = [sum(times) for times in zip(queue_times_avgs, service_times_avgs)]
-    x_axis_values = np.zeros_like(queue_times_avgs, dtype=float)
-    for i in range(len(x_axis_values)):
-        x_axis_values[i] = result.sample_rate * i
-    fig, (ax1, ax2, ax3, ax4) = plt.subplots(4, sharex=True)
-    ax1.set_xlabel('Elapsed Time')
-    ax1.set_ylabel('Resp. Time')
-    ax1.plot(
-        x_axis_values,
-        queue_times_avgs,
-        label='queue time'
-    )
-    ax1.plot(
-        x_axis_values,
-        service_times_avgs,
-        label='service time'
-    )
-    ax1.plot(
-        x_axis_values,
-        response_times_avgs,
-        label='response time'
-    )
-    for restock in result.get_restocks():
-        ax1.axvline(x=restock, linestyle='-.', color='c')
-    ax1.legend(loc=0)
-    ax1.set_ylim(ymin=0)
-
-    ax2.plot(
-        x_axis_values,
-        np.resize(result.num_started_requests, len(x_axis_values)) / result.sample_rate,
-        'g:',
-        label='requests/s'
-    )
-    ax2.set_ylabel('requests/s')
-    ax2.legend(loc=0)
-    ax2.set_ylim(ymin=0)
-
-    ax3.plot(
-        x_axis_values,
-        stock_avgs,
-        'r--',
-        label='supply'
-    )
-    ax3.legend(loc=0)
-    ax3.set_ylabel('items')
-    ax3.set_ylim(ymin=0)
-
-    ax4.plot(
-        np.resize(result.bin_nums_timestamps, result.bin_nums_next_index),
-        np.resize(result.bin_nums, result.bin_nums_next_index),
-        label='number of bins'
-    )
-    ax4.legend(loc=0)
-    ax4.set_ylabel('bins')
-    ax4.set_ylim(ymin=0)
-
-    plt.show()
+    # x_axis_values = np.zeros_like(queue_times_avgs, dtype=float)
+    # for i in range(len(x_axis_values)):
+    #     x_axis_values[i] = result.sample_rate * i
+    # fig, (ax1, ax2, ax3, ax4) = plt.subplots(4, sharex=True)
+    # ax1.set_xlabel('Elapsed Time')
+    # ax1.set_ylabel('Resp. Time')
+    # ax1.plot(
+    #     x_axis_values,
+    #     queue_times_avgs,
+    #     label='queue time'
+    # )
+    # ax1.plot(
+    #     x_axis_values,
+    #     service_times_avgs,
+    #     label='service time'
+    # )
+    # ax1.plot(
+    #     x_axis_values,
+    #     response_times_avgs,
+    #     label='response time'
+    # )
+    # for restock in result.get_restocks():
+    #     ax1.axvline(x=restock, linestyle='-.', color='c')
+    # ax1.legend(loc=0)
+    # ax1.set_ylim(ymin=0)
+    #
+    # ax2.plot(
+    #     x_axis_values,
+    #     np.resize(result.num_started_requests, len(x_axis_values)) / result.sample_rate,
+    #     'g:',
+    #     label='requests/s'
+    # )
+    # ax2.set_ylabel('requests/s')
+    # ax2.legend(loc=0)
+    # ax2.set_ylim(ymin=0)
+    #
+    # ax3.plot(
+    #     x_axis_values,
+    #     stock_avgs,
+    #     'r--',
+    #     label='supply'
+    # )
+    # ax3.legend(loc=0)
+    # ax3.set_ylabel('items')
+    # ax3.set_ylim(ymin=0)
+    #
+    # ax4.plot(
+    #     np.resize(result.bin_nums_timestamps, result.bin_nums_next_index),
+    #     np.resize(result.bin_nums, result.bin_nums_next_index),
+    #     label='number of bins'
+    # )
+    # ax4.legend(loc=0)
+    # ax4.set_ylabel('bins')
+    # ax4.set_ylim(ymin=0)
+    #
+    # plt.show()
     avg_rt = np.mean(response_times_avgs)
     max_rt = max(response_times_avgs)
     cum_rt = sum(response_times_avgs)
