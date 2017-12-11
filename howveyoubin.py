@@ -135,7 +135,6 @@ def perform_experiment(num_bins, filename, adaptor):
     script_start = script[0].timestamp
     script_end = script[-1].timestamp
     recorder = history_recorder.Recorder(TIME_BETWEEN_ADAPTATION, script_end)
-    adaptor = adaptors.PIAdaptor()
 
     for ts in np.arange(script_start, script_end, TIME_BETWEEN_ADAPTATION):
         a = AdaptNow(ts)
