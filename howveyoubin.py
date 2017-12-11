@@ -26,11 +26,6 @@ RAND_SEED = 1
 SERVICE_TIME = 0.15
 
 
-# the number of bins to use for sampling performance metrics over the course
-# of evaluating an entire script
-NUM_METRIC_BINS = 50
-
-
 # the number of time steps between invoking self-adaptive component
 TIME_BETWEEN_ADAPTATION = 10
 
@@ -139,8 +134,7 @@ def perform_experiment(num_bins, filename):
     rctr = reactor.Reactor(0, num_bins, 0, SERVICE_TIME, RAND_SEED)
     script_start = script[0].timestamp
     script_end = script[-1].timestamp
-    script_timespan = script_end - script_start
-    recorder = history_recorder.Recorder(script_timespan / NUM_METRIC_BINS, script_end)
+    recorder = history_recorder.Recorder(TIME_BETWEEN_ADAPTATION, script_end)
     adaptor = adaptors.PIAdaptor()
 
     for ts in np.arange(script_start, script_end, TIME_BETWEEN_ADAPTATION):

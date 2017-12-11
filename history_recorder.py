@@ -166,6 +166,10 @@ class Recorder:
             the avg service time
         """
         bin_index = math.floor(timestamp / self.sample_rate)
+        # if timestamp is super-duper close (or exactly) a new epoch,
+        # report the last epoch
+        if 0 <= ((timestamp % self.sample_rate) / self.sample_rate) <= 0.05:
+            bin_index = max(0, bin_index-1)
         num = self.service_time_numerator[bin_index]
         denom = self.num_records[bin_index]
         if denom == 0:
@@ -181,6 +185,10 @@ class Recorder:
             the avg queue time
         """
         bin_index = math.floor(timestamp / self.sample_rate)
+        # if timestamp is super-duper close (or exactly) a new epoch,
+        # report the last epoch
+        if 0 <= ((timestamp % self.sample_rate) / self.sample_rate) <= 0.05:
+            bin_index = max(0, bin_index-1)
         num = self.queue_waiting_numerator[bin_index]
         denom = self.num_records[bin_index]
         if denom == 0:
@@ -196,6 +204,10 @@ class Recorder:
             the average stock
         """
         bin_index = math.floor(timestamp / self.sample_rate)
+        # if timestamp is super-duper close (or exactly) a new epoch,
+        # report the last epoch
+        if 0 <= ((timestamp % self.sample_rate) / self.sample_rate) <= 0.05:
+            bin_index = max(0, bin_index-1)
         num = self.stock_numerator[bin_index]
         denom = self.num_records[bin_index]
         if denom == 0:
@@ -232,6 +244,10 @@ class Recorder:
             the average number of bins checked
         """
         bin_index = math.floor(timestamp / self.sample_rate)
+        # if timestamp is super-duper close (or exactly) a new epoch,
+        # report the last epoch
+        if 0 <= ((timestamp % self.sample_rate) / self.sample_rate) <= 0.05:
+            bin_index = max(0, bin_index-1)
         num = self.checked_numerator[bin_index]
         denom = self.num_records[bin_index]
         if denom == 0:
