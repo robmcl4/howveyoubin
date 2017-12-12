@@ -391,6 +391,15 @@ def plot_timeplot(num_bins, fname, kp, ki, kd, i_min, i_max):
         'std_bc': std_bc
     }
 
+def sample_points(ref, gamma, num_samples):
+    lower_bound = ref * (1-gamma)
+    upper_bound = ref * (1+gamma)
+    if lower_bound < upper_bound:
+        return np.linspace(lower_bound, upper_bound, num_samples)
+    else:
+        offset = random.uniform(0, gamma)
+        return np.linspace(-offset, offset, num_samples)
+
 def main():
     args = handle_arguments()
     random.seed(RAND_SEED)
@@ -413,21 +422,9 @@ def main():
         while True:
             lower_coef = 1-gamma
             upper_coef = 1+gamma
-            kps = np.linspace(
-                (best_config['kp'] + random.uniform(-1, 1)) * lower_coef,
-                (best_config['kp'] + random.uniform(-1, 1)) * upper_coef,
-                num_samples
-            )
-            kis = np.linspace(
-                (best_config['ki'] + random.uniform(-1, 1)) * lower_coef,
-                (best_config['ki'] + random.uniform(-1, 1)) * upper_coef,
-                num_samples
-            )
-            kds = np.linspace(
-                (best_config['kd'] + random.uniform(-1, 1)) * lower_coef,
-                (best_config['kd'] + random.uniform(-1, 1)) * upper_coef,
-                num_samples
-            )
+            kps = sample_points(best_config['kp'], gamma, num_samples)
+            kis = sample_points(best_config['ki'], gamma, num_samples)
+            kds = sample_points(best_config['kd'], gamma, num_samples)
             i_min = -1
             i_max = 1
 
