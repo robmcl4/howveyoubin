@@ -422,7 +422,6 @@ def main():
             for kp in kps:
                 for ki in kis:
                     for kd in kds:
-                        print(kp, ki, kd, i_min, i_max)
                         try:
                             results = plot_timeplot(args.max_bins, args.filename, kp, ki, kd, i_min, i_max)
                             print(
@@ -430,8 +429,7 @@ def main():
                                 results['max_rt'], results['cum_rt'],
                                 results['std_rt'], results['std_bc']
                             )
-                            if results['max_rt'] < best_stats['max_rt']:
-                                best_stats = results
+                            if results['max_rt'] < best_config['max_rt']:
                                 best_config = { 'kp': kp, 'ki': ki, 'kd': kd , 'i_min': i_min, 'i_max': i_max }
                                 {
                                     'kp': kp,
