@@ -418,11 +418,16 @@ def main():
             'std_rt': float('inf'),
             'std_bc': float('inf')
         }
-        num_samples = 3
 
-        while True:
-            lower_coef = 1-gamma
-            upper_coef = 1+gamma
+        num_samples = 4
+        epoch_count = 0
+        epochs_since_last_improvement = 0
+
+        while epoch_count < 100:
+            print('<<<EPOCH {0}>>>'.format(epoch_count))
+            epoch_count +=1
+            epochs_since_last_improvement += 1
+
             kps = sample_points(best_config['kp'], gamma, num_samples)
             kis = sample_points(best_config['ki'], gamma, num_samples)
             kds = sample_points(best_config['kd'], gamma, num_samples)
@@ -436,15 +441,13 @@ def main():
                     for kd in kds:
                         try:
                             with open('tremendous.csv', 'a') as f:
-                                writer = csv.writer(f)
-
                                 results = plot_timeplot(args.max_bins, args.filename, kp, ki, kd, i_min, i_max)
-
-                                writer.writerow([
+                                print(
                                     kp, ki, kd, i_min, i_max, results['avg_rt'],
                                     results['max_rt'], results['cum_rt'],
                                     results['std_rt'], results['std_bc']
-                                ])
+                                )
+                                
                                 if results['max_rt'] < best_config['max_rt']:
                                     best_config = {
                                         'kp': kp,
@@ -458,14 +461,21 @@ def main():
                                         'std_rt': results['std_rt'],
                                         'std_bc': results['std_bc']
                                     }
+                                    writer = csv.writer(f)
+                                    writer.writerow([
+                                        kp, ki, kd, i_min, i_max, results['avg_rt'],
+                                        results['max_rt'], results['cum_rt'],
+                                        results['std_rt'], results['std_bc']
+                                    ])
                                     has_best_changed = True
+                                    epochs_since_last_improvement = 0
                         except AssertionError as err:
                             print(
                                 kp, ki, kd, i_min, i_max, "inf",
                                 "inf", "inf", "inf", "inf"
                             )
                         except:
-                            writer.writerow(["Unexpected error:", sys.exc_info()[0]])
+                            print("Unexpected error:", sys.exc_info()[0])
                             raise
                 if not has_best_changed:
                     gamma = gamma * 2
