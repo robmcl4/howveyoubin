@@ -28,7 +28,7 @@ class PIDAdaptor:
             current_utilization: float,
             timestamp: float
         ) -> int:
-        set_point = 0.155
+        set_point = 0.1618885941
         measurement = current_service_time + current_queue_time
         err = set_point - measurement
         self.accumulated_error += err
