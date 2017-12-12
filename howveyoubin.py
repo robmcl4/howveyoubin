@@ -7,6 +7,7 @@ simulates the lettuce inventory-management system
 
 import argparse
 import numpy as np
+import random
 # import matplotlib.pyplot as plt
 
 import script_parser
@@ -274,19 +275,19 @@ def handle_arguments():
         action='store_true')
     parser.add_argument("-p",
         "--proportional-gain",
-        type=tuple_of_two,
+        type=float,
         dest="kp",
-        default=(0.0, 1.0))
+        default=1.0)
     parser.add_argument("-i",
         "--integral-gain",
-        type=tuple_of_two,
+        type=float,
         dest="ki",
-        default=(0.0, 1.0))
+        default=1.0)
     parser.add_argument("-d",
         "--derivative-gain",
-        type=tuple_of_two,
+        type=float,
         dest="kd",
-        default=(0.0, 1.0))
+        default=1.0)
     parser.add_argument("-m",
         "--integral-extrema",
         type=tuple_of_two,
@@ -392,12 +393,13 @@ def plot_timeplot(num_bins, fname, kp, ki, kd, i_min, i_max):
 
 def main():
     args = handle_arguments()
+    random.seed(RAND_SEED)
     if args.time_plot:
         gamma = 1.0
         best_config = {
-            'kp': 3,
-            'ki': 0.05,
-            'kd': 50 ,
+            'kp': args.kp,
+            'ki': args.ki,
+            'kd': args.kd,
             'i_min': -1,
             'i_max': 1,
             'avg_rt': float('inf'),
@@ -411,9 +413,21 @@ def main():
         while True:
             lower_coef = 1-gamma
             upper_coef = 1+gamma
-            kps = np.linspace(best_config['kp'] * lower_coef, best_config['kp'] * upper_coef, num_samples)
-            kis = np.linspace(best_config['ki'] * lower_coef, best_config['ki'] * upper_coef, num_samples)
-            kds = np.linspace(best_config['kd'] * lower_coef, best_config['kd'] * upper_coef, num_samples)
+            kps = np.linspace(
+                (best_config['kp'] + random.uniform(-1, 1)) * lower_coef,
+                (best_config['kp'] + random.uniform(-1, 1)) * upper_coef,
+                num_samples
+            )
+            kis = np.linspace(
+                (best_config['ki'] + random.uniform(-1, 1)) * lower_coef,
+                (best_config['ki'] + random.uniform(-1, 1)) * upper_coef,
+                num_samples
+            )
+            kds = np.linspace(
+                (best_config['kd'] + random.uniform(-1, 1)) * lower_coef,
+                (best_config['kd'] + random.uniform(-1, 1)) * upper_coef,
+                num_samples
+            )
             i_min = -1
             i_max = 1
 
@@ -452,7 +466,7 @@ def main():
             if not has_best_changed:
                 gamma = gamma * 2
             else:
-                gamma = gamma / 2.0
+                gamma = gamma / 3.0
     else:
         plot_range_of_bins(args.max_bins, args.filename)
 
