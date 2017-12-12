@@ -382,25 +382,80 @@ def plot_timeplot(num_bins, fname, kp, ki, kd, i_min, i_max):
     std_rt = np.std(response_times_avgs)
     std_bc = np.std(result.bin_nums)
 
-    print(kp, ki, kd, avg_rt, max_rt, cum_rt, i_min, i_max, std_rt, std_bc)
+    return {
+        'avg_rt': avg_rt,
+        'max_rt': max_rt,
+        'cum_rt': cum_rt,
+        'std_rt': std_rt,
+        'std_bc': std_bc
+    }
 
 def main():
     args = handle_arguments()
     if args.time_plot:
-        num_samples = 5
-        kp_samples = np.linspace(args.kp[0], args.kp[1], num_samples)[1:-1] if args.kp[0] != args.kp[1] else [args.kp[0]]
-        ki_samples = np.linspace(args.ki[0], args.ki[1], num_samples)[1:-1] if args.ki[0] != args.ki[1] else [args.ki[0]]
-        kd_samples = np.linspace(args.kd[0], args.kd[1], num_samples)[1:-1] if args.kd[0] != args.kd[1] else [args.kd[0]]
+        gamma = 1.0
+        best_config = {
+            'kp': 3,
+            'ki': 0.05,
+            'kd': 50 ,
+            'i_min': -1,
+            'i_max': 1,
+            'avg_rt': float('inf'),
+            'max_rt': float('inf'),
+            'cum_rt': float('inf'),
+            'std_rt': float('inf'),
+            'std_bc': float('inf')
+        }
+        num_samples = 3
 
-        for kp in kp_samples:
-            for ki in ki_samples:
-                for kd in kd_samples:
-                    for i_min in [args.iex[0]]:
-                        for i_max in [args.iex[1]]:
-                            try:
-                                plot_timeplot(args.max_bins, args.filename, kp, ki, kd, i_min, i_max)
-                            except:
-                                print(kp, ki, kd, float("inf"), float("inf"), float("inf"), i_min, i_max, float("inf"), float("inf"))
+        while True:
+            lower_coef = 1-gamma
+            upper_coef = 1+gamma
+            kps = np.linspace(best_config['kp'] * lower_coef, best_config['kp'] * upper_coef, num_samples)
+            kis = np.linspace(best_config['ki'] * lower_coef, best_config['ki'] * upper_coef, num_samples)
+            kds = np.linspace(best_config['kd'] * lower_coef, best_config['kd'] * upper_coef, num_samples)
+            i_min = -1
+            i_max = 1
+
+            has_best_changed = False
+
+            for kp in kps:
+                for ki in kis:
+                    for kd in kds:
+                        print(kp, ki, kd, i_min, i_max)
+                        try:
+                            results = plot_timeplot(args.max_bins, args.filename, kp, ki, kd, i_min, i_max)
+                            print(
+                                kp, ki, kd, i_min, i_max, results['avg_rt'],
+                                results['max_rt'], results['cum_rt'],
+                                results['std_rt'], results['std_bc']
+                            )
+                            if results['max_rt'] < best_stats['max_rt']:
+                                best_stats = results
+                                best_config = { 'kp': kp, 'ki': ki, 'kd': kd , 'i_min': i_min, 'i_max': i_max }
+                                {
+                                    'kp': kp,
+                                    'ki': ki,
+                                    'kd': kd,
+                                    'i_min': i_min,
+                                    'i_max': i_max,
+                                    'avg_rt': results['avg_rt'],
+                                    'max_rt': results['max_rt'],
+                                    'cum_rt': results['cum_rt'],
+                                    'std_rt': results['std_rt'],
+                                    'std_bc': results['std_bc']
+                                }
+                                has_best_changed = True
+                                print('<<< NEW BEST >>>')
+                        except AssertionError as err:
+                            print(kp, ki, kd, i_min, i_max, float("inf"), float("inf"), float("inf"), float("inf"), float("inf"))
+                        except:
+                            print("Unexpected error:", sys.exc_info()[0])
+                            raise
+            if not has_best_changed:
+                gamma = gamma * 2
+            else:
+                gamma = gamma / 2.0
     else:
         plot_range_of_bins(args.max_bins, args.filename)
 
