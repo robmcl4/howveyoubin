@@ -430,8 +430,7 @@ def main():
                                 results['std_rt'], results['std_bc']
                             )
                             if results['max_rt'] < best_config['max_rt']:
-                                best_config = { 'kp': kp, 'ki': ki, 'kd': kd , 'i_min': i_min, 'i_max': i_max }
-                                {
+                                best_config = {
                                     'kp': kp,
                                     'ki': ki,
                                     'kd': kd,
