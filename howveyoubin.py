@@ -8,6 +8,7 @@ simulates the lettuce inventory-management system
 import argparse
 import numpy as np
 import random
+import csv
 # import matplotlib.pyplot as plt
 
 import script_parser
@@ -434,36 +435,42 @@ def main():
                 for ki in kis:
                     for kd in kds:
                         try:
-                            results = plot_timeplot(args.max_bins, args.filename, kp, ki, kd, i_min, i_max)
-                            print(
-                                kp, ki, kd, i_min, i_max, results['avg_rt'],
-                                results['max_rt'], results['cum_rt'],
-                                results['std_rt'], results['std_bc']
-                            )
-                            if results['max_rt'] < best_config['max_rt']:
-                                best_config = {
-                                    'kp': kp,
-                                    'ki': ki,
-                                    'kd': kd,
-                                    'i_min': i_min,
-                                    'i_max': i_max,
-                                    'avg_rt': results['avg_rt'],
-                                    'max_rt': results['max_rt'],
-                                    'cum_rt': results['cum_rt'],
-                                    'std_rt': results['std_rt'],
-                                    'std_bc': results['std_bc']
-                                }
-                                has_best_changed = True
-                                print('<<< NEW BEST >>>')
+                            with open('tremendous.csv', 'a') as f:
+                                writer = csv.writer(f)
+
+                                results = plot_timeplot(args.max_bins, args.filename, kp, ki, kd, i_min, i_max)
+
+                                writer.writerow([
+                                    kp, ki, kd, i_min, i_max, results['avg_rt'],
+                                    results['max_rt'], results['cum_rt'],
+                                    results['std_rt'], results['std_bc']
+                                ])
+                                if results['max_rt'] < best_config['max_rt']:
+                                    best_config = {
+                                        'kp': kp,
+                                        'ki': ki,
+                                        'kd': kd,
+                                        'i_min': i_min,
+                                        'i_max': i_max,
+                                        'avg_rt': results['avg_rt'],
+                                        'max_rt': results['max_rt'],
+                                        'cum_rt': results['cum_rt'],
+                                        'std_rt': results['std_rt'],
+                                        'std_bc': results['std_bc']
+                                    }
+                                    has_best_changed = True
                         except AssertionError as err:
-                            print(kp, ki, kd, i_min, i_max, float("inf"), float("inf"), float("inf"), float("inf"), float("inf"))
+                            print(
+                                kp, ki, kd, i_min, i_max, "inf",
+                                "inf", "inf", "inf", "inf"
+                            )
                         except:
-                            print("Unexpected error:", sys.exc_info()[0])
+                            writer.writerow(["Unexpected error:", sys.exc_info()[0]])
                             raise
-            if not has_best_changed:
-                gamma = gamma * 2
-            else:
-                gamma = gamma / 3.0
+                if not has_best_changed:
+                    gamma = gamma * 2
+                else:
+                    gamma = gamma / 3.0
     else:
         plot_range_of_bins(args.max_bins, args.filename)
 
