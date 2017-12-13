@@ -86,7 +86,7 @@ class Reactor:
         """
         assert timestamp >= self._last_time_used
         self._last_time_used = timestamp
-        
+
         # strategy: immediately gets in line for all identified bins
         # and evenly distributes all inventory between them
         if service_bin_ids is None:
@@ -117,15 +117,16 @@ class Reactor:
         if len(self.bins) == num_bins:
             # no work to do
             return timestamp
-        
+
         # find out what the soonest time is that we can destroy the existing bins
         soonest_time = timestamp
         for bin_ in self.bins:
             available_after = bin_.next_unlocked(timestamp)
             if available_after > soonest_time:
                 soonest_time = available_after
-        
+
         stock = self.stock_available()
+        prev_num_bins = len(self.bins)
         del self.bins[:]
 
         # create new bins
@@ -142,10 +143,10 @@ class Reactor:
                     self.rand.randint(0, 10000)
                 )
             )
-        
+
         # estimate how long it took us to make these new bins, and reserve them
         # all for that time
-        service_time = self.rand.expovariate(1 / float(self.service_time))
+        service_time = self.rand.expovariate(1 / float(self.service_time)) * (prev_num_bins + num_bins)
         for bin_ in self.bins:
             bin_.locked_times.append((soonest_time, soonest_time + service_time))
         return soonest_time + service_time
@@ -161,7 +162,7 @@ class Reactor:
         for bin_ in self.bins:
             ret += bin_.remaining_stock()
         return ret
-    
+
     def avg_utilization(self, since: float, to: float) -> float:
         """
         Gets the average bin utilization as a percent of time
@@ -182,7 +183,7 @@ class Bin:
                 on an exponential distribution
             seed - int, random num gen seed
         """
-        # 
+        #
         # Contains the list of times during which this bin is locked, for
         # later lookup. Stored as (start, end) tuples, indicating end-exclusive
         # lock times

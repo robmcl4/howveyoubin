@@ -10,6 +10,7 @@ import numpy as np
 import random
 import csv
 # import matplotlib.pyplot as plt
+import time
 
 import script_parser
 import reactor
@@ -144,8 +145,11 @@ def perform_experiment(num_bins, filename, adaptor):
 
     recorder.record_num_bins(num_bins, 0)
 
+    start_time = time.time()
     # iterate while there's still work to do, and
     while len(script) > 0:
+        assert time.time() < (start_time + 60)
+
         curr_item = script[0]
         del script[0]
 
@@ -161,8 +165,6 @@ def perform_experiment(num_bins, filename, adaptor):
                 rctr.avg_utilization(max(0, curr_item.timestamp - TIME_BETWEEN_ADAPTATION), curr_item.timestamp),
                 curr_item.timestamp
             )
-            assert 1 < new_bin_num
-            assert new_bin_num < 1000
 
             rctr.reshape_num_bins(new_bin_num, curr_item.timestamp)
             recorder.record_num_bins(new_bin_num, curr_item.timestamp)
@@ -418,12 +420,12 @@ def main():
             'std_rt': float('inf'),
             'std_bc': float('inf')
         }
-
+        filename = 'autotune_{0}.csv'.format(time.time())
         num_samples = 4
         epoch_count = 0
         epochs_since_last_improvement = 0
 
-        while epoch_count < 100:
+        while epoch_count < 10:
             print('<<<EPOCH {0}>>>'.format(epoch_count))
             epoch_count +=1
             epochs_since_last_improvement += 1
@@ -440,14 +442,14 @@ def main():
                 for ki in kis:
                     for kd in kds:
                         try:
-                            with open('tremendous.csv', 'a') as f:
+                            with open(filename, 'a') as f:
                                 results = plot_timeplot(args.max_bins, args.filename, kp, ki, kd, i_min, i_max)
                                 print(
                                     kp, ki, kd, i_min, i_max, results['avg_rt'],
                                     results['max_rt'], results['cum_rt'],
                                     results['std_rt'], results['std_bc']
                                 )
-                                
+
                                 if results['max_rt'] < best_config['max_rt']:
                                     best_config = {
                                         'kp': kp,
@@ -467,6 +469,7 @@ def main():
                                         results['max_rt'], results['cum_rt'],
                                         results['std_rt'], results['std_bc']
                                     ])
+                                    print('<<<NEW BEST: {0}>>>'.format(results['max_rt']))
                                     has_best_changed = True
                                     epochs_since_last_improvement = 0
                         except AssertionError as err:
