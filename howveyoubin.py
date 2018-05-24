@@ -7,7 +7,10 @@ simulates the lettuce inventory-management system
 
 import argparse
 import numpy as np
-import matplotlib.pyplot as plt
+import random
+import csv
+# import matplotlib.pyplot as plt
+import time
 
 import script_parser
 import reactor
@@ -124,7 +127,7 @@ def insert_action_sorted(lst, action):
     assert insert_index == len(lst)-1 or lst[insert_index].timestamp <= lst[insert_index+1].timestamp
 
 
-def perform_experiment(num_bins, filename):
+def perform_experiment(num_bins, filename, adaptor):
     """
     Performs the experiment given the supplied number of bins.
     Returns a Recorder object
@@ -135,7 +138,6 @@ def perform_experiment(num_bins, filename):
     script_start = script[0].timestamp
     script_end = script[-1].timestamp
     recorder = history_recorder.Recorder(TIME_BETWEEN_ADAPTATION, script_end)
-    adaptor = adaptors.PIAdaptor()
 
     for ts in np.arange(script_start, script_end, TIME_BETWEEN_ADAPTATION):
         a = AdaptNow(ts)
@@ -143,8 +145,11 @@ def perform_experiment(num_bins, filename):
 
     recorder.record_num_bins(num_bins, 0)
 
-    # iterate while there's still work to do, and 
+    start_time = time.time()
+    # iterate while there's still work to do, and
     while len(script) > 0:
+        assert time.time() < (start_time + 60)
+
         curr_item = script[0]
         del script[0]
 
@@ -160,6 +165,7 @@ def perform_experiment(num_bins, filename):
                 rctr.avg_utilization(max(0, curr_item.timestamp - TIME_BETWEEN_ADAPTATION), curr_item.timestamp),
                 curr_item.timestamp
             )
+
             rctr.reshape_num_bins(new_bin_num, curr_item.timestamp)
             recorder.record_num_bins(new_bin_num, curr_item.timestamp)
         if isinstance(curr_item, ReturnInventoryRequest):
@@ -251,14 +257,45 @@ def perform_experiment(num_bins, filename):
     return recorder
 
 
+def tuple_of_two(t):
+    try:
+        x = float(t.split(',')[0])
+        y = float(t.split(',')[1])
+        tup = (x, y)
+
+        return tup
+    except:
+        raise argparse.ArgumentTypeError("Not a tuple of two ints, try again i guess...")
+
+
 def handle_arguments():
     parser = argparse.ArgumentParser()
     parser.add_argument("filename", help="CSV filename to run")
     parser.add_argument("max_bins", type=int, help="max number of bins to search")
     parser.add_argument("-t",
-        "--time-plot", 
+        "--time-plot",
         help="plot a time-plot of performance with the given number of bins",
         action='store_true')
+    parser.add_argument("-p",
+        "--proportional-gain",
+        type=float,
+        dest="kp",
+        default=1.0)
+    parser.add_argument("-i",
+        "--integral-gain",
+        type=float,
+        dest="ki",
+        default=1.0)
+    parser.add_argument("-d",
+        "--derivative-gain",
+        type=float,
+        dest="kd",
+        default=1.0)
+    parser.add_argument("-m",
+        "--integral-extrema",
+        type=tuple_of_two,
+        dest="iex",
+        default=(-1.0, 1.0))
     return parser.parse_args()
 
 
@@ -281,67 +318,172 @@ def plot_range_of_bins(max_bins, fname):
     plt.show()
 
 
-def plot_timeplot(num_bins, fname):
+def plot_timeplot(num_bins, fname, kp, ki, kd, i_min, i_max):
     assert num_bins > 0
-    result = perform_experiment(num_bins, fname)
+    adaptor = adaptors.PIDAdaptor(kp, ki, kd, i_min, i_max)
+    result = perform_experiment(num_bins, fname, adaptor)
     queue_times_avgs, service_times_avgs, stock_avgs = result.get_timelog()
-    x_axis_values = np.zeros_like(queue_times_avgs, dtype=float)
-    for i in range(len(x_axis_values)):
-        x_axis_values[i] = result.sample_rate * i
-    fig, (ax1, ax2, ax3, ax4) = plt.subplots(4, sharex=True)
-    ax1.set_xlabel('Elapsed Time')
-    ax1.set_ylabel('Resp. Time')
-    ax1.plot(
-        x_axis_values,
-        queue_times_avgs,
-        label='queue time'
-    )
-    ax1.plot(
-        x_axis_values,
-        service_times_avgs,
-        label='service time'
-    )
-    for restock in result.get_restocks():
-        ax1.axvline(x=restock, linestyle='-.', color='c')
-    ax1.legend(loc=0)
-    ax1.set_ylim(ymin=0)
+    response_times_avgs = [sum(times) for times in zip(queue_times_avgs, service_times_avgs)]
+    # x_axis_values = np.zeros_like(queue_times_avgs, dtype=float)
+    # for i in range(len(x_axis_values)):
+    #     x_axis_values[i] = result.sample_rate * i
+    # fig, (ax1, ax2, ax3, ax4) = plt.subplots(4, sharex=True)
+    # ax1.set_xlabel('Elapsed Time')
+    # ax1.set_ylabel('Resp. Time')
+    # ax1.plot(
+    #     x_axis_values,
+    #     queue_times_avgs,
+    #     label='queue time'
+    # )
+    # ax1.plot(
+    #     x_axis_values,
+    #     service_times_avgs,
+    #     label='service time'
+    # )
+    # ax1.plot(
+    #     x_axis_values,
+    #     response_times_avgs,
+    #     label='response time'
+    # )
+    # for restock in result.get_restocks():
+    #     ax1.axvline(x=restock, linestyle='-.', color='c')
+    # ax1.legend(loc=0)
+    # ax1.set_ylim(ymin=0)
+    #
+    # ax2.plot(
+    #     x_axis_values,
+    #     np.resize(result.num_started_requests, len(x_axis_values)) / result.sample_rate,
+    #     'g:',
+    #     label='requests/s'
+    # )
+    # ax2.set_ylabel('requests/s')
+    # ax2.legend(loc=0)
+    # ax2.set_ylim(ymin=0)
+    #
+    # ax3.plot(
+    #     x_axis_values,
+    #     stock_avgs,
+    #     'r--',
+    #     label='supply'
+    # )
+    # ax3.legend(loc=0)
+    # ax3.set_ylabel('items')
+    # ax3.set_ylim(ymin=0)
+    #
+    # ax4.plot(
+    #     np.resize(result.bin_nums_timestamps, result.bin_nums_next_index),
+    #     np.resize(result.bin_nums, result.bin_nums_next_index),
+    #     label='number of bins'
+    # )
+    # ax4.legend(loc=0)
+    # ax4.set_ylabel('bins')
+    # ax4.set_ylim(ymin=0)
+    #
+    # plt.show()
+    avg_rt = np.mean(response_times_avgs)
+    max_rt = max(response_times_avgs)
+    cum_rt = sum(response_times_avgs)
+    std_rt = np.std(response_times_avgs)
+    std_bc = np.std(result.bin_nums)
 
-    ax2.plot(
-        x_axis_values,
-        np.resize(result.num_started_requests, len(x_axis_values)) / result.sample_rate,
-        'g:',
-        label='requests/s'
-    )
-    ax2.set_ylabel('requests/s')
-    ax2.legend(loc=0)
-    ax2.set_ylim(ymin=0)
+    return {
+        'avg_rt': avg_rt,
+        'max_rt': max_rt,
+        'cum_rt': cum_rt,
+        'std_rt': std_rt,
+        'std_bc': std_bc
+    }
 
-    ax3.plot(
-        x_axis_values,
-        stock_avgs,
-        'r--',
-        label='supply'
-    )
-    ax3.legend(loc=0)
-    ax3.set_ylabel('items')
-    ax3.set_ylim(ymin=0)
-
-    ax4.plot(
-        np.resize(result.bin_nums_timestamps, result.bin_nums_next_index),
-        np.resize(result.bin_nums, result.bin_nums_next_index),
-        label='number of bins'
-    )
-    ax4.legend(loc=0)
-    ax4.set_ylabel('bins')
-    ax4.set_ylim(ymin=0)
-
-    plt.show()
-
+def sample_points(ref, gamma, num_samples):
+    lower_bound = ref * (1-gamma)
+    upper_bound = ref * (1+gamma)
+    if lower_bound < upper_bound:
+        return np.linspace(lower_bound, upper_bound, num_samples)
+    else:
+        offset = random.uniform(0, gamma)
+        return np.linspace(-offset, offset, num_samples)
 
 def main():
     args = handle_arguments()
+    random.seed(RAND_SEED)
     if args.time_plot:
-        plot_timeplot(args.max_bins, args.filename)
+        gamma = 1.0
+        best_config = {
+            'kp': args.kp,
+            'ki': args.ki,
+            'kd': args.kd,
+            'i_min': -1,
+            'i_max': 1,
+            'avg_rt': float('inf'),
+            'max_rt': float('inf'),
+            'cum_rt': float('inf'),
+            'std_rt': float('inf'),
+            'std_bc': float('inf')
+        }
+        filename = 'autotune_{0}.csv'.format(time.time())
+        num_samples = 4
+        epoch_count = 0
+        epochs_since_last_improvement = 0
+
+        while epoch_count < 10:
+            print('<<<EPOCH {0}>>>'.format(epoch_count))
+            epoch_count +=1
+            epochs_since_last_improvement += 1
+
+            kps = sample_points(best_config['kp'], gamma, num_samples)
+            kis = sample_points(best_config['ki'], gamma, num_samples)
+            kds = sample_points(best_config['kd'], gamma, num_samples)
+            i_min = -1
+            i_max = 1
+
+            has_best_changed = False
+
+            for kp in kps:
+                for ki in kis:
+                    for kd in kds:
+                        try:
+                            with open(filename, 'a') as f:
+                                results = plot_timeplot(args.max_bins, args.filename, kp, ki, kd, i_min, i_max)
+                                print(
+                                    kp, ki, kd, i_min, i_max, results['avg_rt'],
+                                    results['max_rt'], results['cum_rt'],
+                                    results['std_rt'], results['std_bc']
+                                )
+
+                                if results['max_rt'] < best_config['max_rt']:
+                                    best_config = {
+                                        'kp': kp,
+                                        'ki': ki,
+                                        'kd': kd,
+                                        'i_min': i_min,
+                                        'i_max': i_max,
+                                        'avg_rt': results['avg_rt'],
+                                        'max_rt': results['max_rt'],
+                                        'cum_rt': results['cum_rt'],
+                                        'std_rt': results['std_rt'],
+                                        'std_bc': results['std_bc']
+                                    }
+                                    writer = csv.writer(f)
+                                    writer.writerow([
+                                        kp, ki, kd, i_min, i_max, results['avg_rt'],
+                                        results['max_rt'], results['cum_rt'],
+                                        results['std_rt'], results['std_bc']
+                                    ])
+                                    print('<<<NEW BEST: {0}>>>'.format(results['max_rt']))
+                                    has_best_changed = True
+                                    epochs_since_last_improvement = 0
+                        except AssertionError as err:
+                            print(
+                                kp, ki, kd, i_min, i_max, "inf",
+                                "inf", "inf", "inf", "inf"
+                            )
+                        except:
+                            print("Unexpected error:", sys.exc_info()[0])
+                            raise
+                if not has_best_changed:
+                    gamma = gamma * 2
+                else:
+                    gamma = gamma / 3.0
     else:
         plot_range_of_bins(args.max_bins, args.filename)
 

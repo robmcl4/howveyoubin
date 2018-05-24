@@ -62,8 +62,11 @@ def main():
         while next_request <= args.time:
             inter_arrival_time = args.request_arrival_rate
             # if in phase 2, adjust IAT
-            if next_request > args.time / 2 and args.request_arrival_rate_phase_2:
+            half_time = args.time / 2
+            if (half_time < next_request < half_time + 100) and args.request_arrival_rate_phase_2:
                 inter_arrival_time = args.request_arrival_rate_phase_2
+            else:
+                inter_arrival_time = args.request_arrival_rate
             # figure out if we do a restock or a request next
             if (not args.no_restock) and inventory <= args.restock_limit:
                 # do restock
