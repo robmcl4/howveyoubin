@@ -256,7 +256,7 @@ def handle_arguments():
     parser.add_argument("filename", help="CSV filename to run")
     parser.add_argument("max_bins", type=int, help="max number of bins to search")
     parser.add_argument("-t",
-        "--time-plot", 
+        "--time-plot",
         help="plot a time-plot of performance with the given number of bins",
         action='store_true')
     return parser.parse_args()
